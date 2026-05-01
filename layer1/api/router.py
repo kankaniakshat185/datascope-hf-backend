@@ -2,7 +2,9 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Body
 from pydantic import BaseModel
 import pandas as pd
 import io
+import json
 from typing import Dict, Any, List
+from fastapi import APIRouter, UploadFile, File, HTTPException, Body, Form
 from fastapi.responses import StreamingResponse
 
 from layer1.models.schemas import (
@@ -113,18 +115,17 @@ async def run_segmented_shap(target_column: str, file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Segmented SHAP failed: {str(e)}")
 
 @router.post("/pipeline/run")
-async def run_pipeline(file: UploadFile = File(...)):
+async def run_pipeline(
+    file: UploadFile = File(...),
+    config_json: str = Form(...)
+):
     """Runs the dynamic cleaning pipeline and returns a cleaned CSV file."""
     try:
         content = await file.read()
         df = pd.read_csv(io.BytesIO(content))
         
-        # Standard robust pipeline
-        config = [
-            {"step": "drop_missing", "params": {"threshold": 0.5}},
-            {"step": "impute_missing", "params": {"strategy": "median"}},
-            {"step": "remove_outliers", "params": {"threshold": 0.6}}
-        ]
+        # Parse dynamic config from frontend
+        config = json.loads(config_json)
         
         cleaned_df, logs = build_and_run_pipeline(df, config=config)
         
