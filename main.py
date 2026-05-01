@@ -41,8 +41,19 @@ def get_target_column(df: pd.DataFrame) -> str:
             
     return valid_cols[-1]
 
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Dataset Debugger ML Service")
 app.include_router(layer1_router)
+
+# Enable CORS for Vercel Frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins (Vercel, localhost, etc.)
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 async def parse_uploaded_file(file: UploadFile) -> pd.DataFrame:
     file_ext = file.filename.split('.')[-1].lower()
