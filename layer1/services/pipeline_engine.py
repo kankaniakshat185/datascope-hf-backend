@@ -89,11 +89,57 @@ def encode_categorical(df: pd.DataFrame, strategy: str = "one_hot", columns: Lis
     }
     return df_out, log
 
+def drop_missing(df: pd.DataFrame, threshold: float = 0.5, columns: List[str] = None) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Drops columns with missing value ratio >= threshold."""
+    df_out = df.copy()
+    if columns is None:
+        columns = df_out.columns.tolist()
+        
+    cols_dropped = []
+    for col in columns:
+        if df_out[col].isnull().mean() >= threshold:
+            df_out = df_out.drop(columns=[col])
+            cols_dropped.append(col)
+            
+    log = {
+        "step_name": "Drop Missing Columns",
+        "transformation_applied": f"Dropped {len(cols_dropped)} columns exceeding {threshold*100}% missing",
+        "rows_affected": 0
+    }
+    return df_out, log
+
+def scale_features(df: pd.DataFrame, method: str = "standard", columns: List[str] = None) -> Tuple[pd.DataFrame, Dict[str, Any]]:
+    """Scales numeric features."""
+    df_out = df.copy()
+    if columns is None:
+        columns = df_out.select_dtypes(include=[np.number]).columns.tolist()
+        
+    if not columns:
+        return df_out, {"step_name": "Scale Features", "transformation_applied": "No numeric columns to scale", "rows_affected": 0}
+        
+    if method == "standard":
+        from sklearn.preprocessing import StandardScaler
+        scaler = StandardScaler()
+        df_out[columns] = scaler.fit_transform(df_out[columns])
+    elif method == "minmax":
+        from sklearn.preprocessing import MinMaxScaler
+        scaler = MinMaxScaler()
+        df_out[columns] = scaler.fit_transform(df_out[columns])
+        
+    log = {
+        "step_name": "Scale Features",
+        "transformation_applied": f"Scaled {len(columns)} features using {method} scaling",
+        "rows_affected": len(df_out)
+    }
+    return df_out, log
+
 # Registry of available steps
 PIPELINE_STEPS = {
     "impute_missing": impute_missing,
     "remove_outliers": remove_outliers,
-    "encode_categorical": encode_categorical
+    "encode_categorical": encode_categorical,
+    "drop_missing": drop_missing,
+    "scale_features": scale_features
 }
 
 class DataPipeline:

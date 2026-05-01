@@ -68,15 +68,7 @@ def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str 
         X_sample = X
         y_sample = y
 
-    # 1. Cluster the data
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X_sample)
-    
-    optimal_k = auto_select_k(X_scaled, max_k=4)
-    kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init='auto')
-    cluster_labels = kmeans.fit_predict(X_scaled)
-    
-    # 2. Train Global Model
+    # 1. Train Global Model
     if problem_type == 'regression':
         model = RandomForestRegressor(n_estimators=50, random_state=42, n_jobs=-1)
     else:
@@ -84,38 +76,34 @@ def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str 
         
     model.fit(X_sample, y_sample)
     
-    # 3. Compute SHAP values
+    # 2. Compute SHAP values
     explainer = shap.TreeExplainer(model)
-    
-    # For speed, use an approximated check_additivity=False if necessary, but default is usually fine
     shap_values_obj = explainer(X_sample, check_additivity=False)
     
-    # Extract values (handle multi-class if classifier)
     if isinstance(shap_values_obj.values, list) or len(shap_values_obj.values.shape) == 3:
-        # Multi-class output: take the SHAP values for the predicted class or class 1
         shap_vals = shap_values_obj.values[:, :, 1] if len(shap_values_obj.values.shape) == 3 else shap_values_obj.values[1]
     else:
         shap_vals = shap_values_obj.values
+
+    # 3. Cluster on the SHAP values (Behavioral Clustering)
+    # This groups users based on how the model explains their predictions
+    optimal_k = auto_select_k(shap_vals, max_k=4)
+    kmeans = KMeans(n_clusters=optimal_k, random_state=42, n_init='auto')
+    cluster_labels = kmeans.fit_predict(shap_vals)
         
     # 4. Aggregate by cluster
     clusters_results = {}
     cluster_top_feats = []
     
     for k in range(optimal_k):
-        # Mask for current cluster
         mask = (cluster_labels == k)
         if not np.any(mask):
             continue
             
         cluster_shap_vals = shap_vals[mask]
-        
-        # Calculate mean absolute SHAP value for each feature in this cluster
         mean_abs_shap = np.abs(cluster_shap_vals).mean(axis=0)
         
-        # Map to feature names
         feature_importance = {feat: float(val) for feat, val in zip(X_sample.columns, mean_abs_shap)}
-        
-        # Sort to get top features
         sorted_feats = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
         top_features = [feat for feat, val in sorted_feats[:3]]
         
