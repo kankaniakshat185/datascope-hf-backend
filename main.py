@@ -6,6 +6,7 @@ import io
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from debugger import run_all_checks
+from layer1.api.router import router as layer1_router
 
 def get_target_column(df: pd.DataFrame) -> str:
     # Use valid clean columns 
@@ -41,6 +42,7 @@ def get_target_column(df: pd.DataFrame) -> str:
     return valid_cols[-1]
 
 app = FastAPI(title="Dataset Debugger ML Service")
+app.include_router(layer1_router)
 
 async def parse_uploaded_file(file: UploadFile) -> pd.DataFrame:
     file_ext = file.filename.split('.')[-1].lower()
