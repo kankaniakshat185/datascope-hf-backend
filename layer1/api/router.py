@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import pandas as pd
 import io
 from typing import Dict, Any, List
+from fastapi.responses import StreamingResponse
 
 from layer1.models.schemas import (
     FullAnalysisResponse, 
@@ -110,3 +111,49 @@ async def run_segmented_shap(target_column: str, file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Segmented SHAP failed: {str(e)}")
+
+@router.post("/pipeline/run")
+async def run_pipeline(file: UploadFile = File(...)):
+    """Runs the dynamic cleaning pipeline and returns a cleaned CSV file."""
+    try:
+        content = await file.read()
+        df = pd.read_csv(io.BytesIO(content))
+        
+        # Standard robust pipeline
+        config = [
+            {"step": "drop_missing", "params": {"threshold": 0.5}},
+            {"step": "impute_missing", "params": {"strategy": "median"}},
+            {"step": "remove_outliers", "params": {"threshold": 0.6}}
+        ]
+        
+        cleaned_df, logs = build_and_run_pipeline(df, config=config)
+        
+        stream = io.StringIO()
+        cleaned_df.to_csv(stream, index=False)
+        response = StreamingResponse(iter([stream.getvalue()]), media_type="text/csv")
+        response.headers["Content-Disposition"] = f"attachment; filename=cleaned_{file.filename}"
+        return response
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pipeline failed: {str(e)}")
+
+@router.post("/drift", response_model=DriftAnalysisResponse)
+async def run_drift_analysis(
+    reference_file: UploadFile = File(...),
+    test_file: UploadFile = File(...)
+):
+    """Runs Layer 1 Multi-Metric Drift Detection using raw dataframes."""
+    try:
+        ref_content = await reference_file.read()
+        ref_df = pd.read_csv(io.BytesIO(ref_content))
+        
+        test_content = await test_file.read()
+        test_df = pd.read_csv(io.BytesIO(test_content))
+        
+        drift_features, overall_drift = compute_drift_analysis(ref_df, test_df)
+        
+        return {
+            "features": drift_features,
+            "overall_drift_detected": overall_drift
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Drift analysis failed: {str(e)}")
