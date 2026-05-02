@@ -77,6 +77,8 @@ async def parse_uploaded_file(file: UploadFile) -> pd.DataFrame:
     
     return df
 
+from layer1.services.outlier_engine import compute_consensus
+
 def generate_data_dictionary(df: pd.DataFrame) -> dict:
     total_rows = len(df)
     dictionary = []
@@ -104,6 +106,19 @@ def generate_data_dictionary(df: pd.DataFrame) -> dict:
             col_info["min"] = float(col_series.min()) if not pd.isna(col_series.min()) else None
             col_info["max"] = float(col_series.max()) if not pd.isna(col_series.max()) else None
             col_info["mean"] = float(col_series.mean()) if not pd.isna(col_series.mean()) else None
+            
+            # Calculate univariate outlier percentage using the Layer 1 Consensus engine
+            try:
+                # Run consensus on just this column
+                col_df = df[[col]].copy()
+                # compute_consensus requires at least 10 rows for isolation forest/dbscan
+                if len(col_df.dropna()) > 10:
+                    results_df, summary = compute_consensus(col_df)
+                    col_info["outlier_percentage"] = round(summary["percentage_flagged"], 2)
+                else:
+                    col_info["outlier_percentage"] = 0.0
+            except Exception as e:
+                col_info["outlier_percentage"] = 0.0
         else:
             mode_val = col_series.mode()
             col_info["top_value"] = str(mode_val.iloc[0]) if not mode_val.empty else None
@@ -162,7 +177,8 @@ def generate_eda_data(df: pd.DataFrame) -> dict:
     eda_results = {
         "distributions": {},
         "value_counts": {},
-        "correlation_matrix": None
+        "correlation_matrix": None,
+        "outlier_plots": {}
     }
     
     numeric_cols = df.select_dtypes(include=['int64', 'float64']).columns.tolist()
@@ -208,6 +224,37 @@ def generate_eda_data(df: pd.DataFrame) -> dict:
             "matrix": corr_df.values.tolist()
         }
         
+    # 4. Outlier Plots (Boxplot stats)
+    for col in numeric_cols:
+        col_data = df[col].dropna()
+        if len(col_data) > 0:
+            q1 = float(col_data.quantile(0.25))
+            q3 = float(col_data.quantile(0.75))
+            iqr = q3 - q1
+            lower_bound = q1 - 1.5 * iqr
+            upper_bound = q3 + 1.5 * iqr
+            
+            outliers = col_data[(col_data < lower_bound) | (col_data > upper_bound)]
+            
+            # Cap the number of outliers sent to frontend to prevent huge payloads
+            outlier_list = []
+            if len(outliers) > 0:
+                if len(outliers) > 100:
+                    outlier_list = outliers.sample(100).tolist()
+                else:
+                    outlier_list = outliers.tolist()
+                    
+            eda_results["outlier_plots"][col] = {
+                "min": float(col_data.min()),
+                "max": float(col_data.max()),
+                "q1": q1,
+                "median": float(col_data.median()),
+                "q3": q3,
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound,
+                "outliers": outlier_list
+            }
+            
     return eda_results
 
 @app.post("/eda")
