@@ -1,3 +1,12 @@
+---
+title: Datascope
+emoji: 📊
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+pinned: false
+---
+
 # DataScope 
 
 ![DataScope Dashboard](https://github.com/kankaniakshat185/datascope-app-frontend/blob/main/hero.png)
@@ -125,3 +134,4 @@ Provides segmented model intelligence. It quickly calculates native Random Fores
 ## License
 
 MIT
+
