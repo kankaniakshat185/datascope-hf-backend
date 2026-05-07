@@ -1,7 +1,7 @@
 name: Sync to HuggingFace Hub
 on:
   push:
-    branches: [main] # triggers when you push to main
+    branches: [main]
 
 jobs:
   sync-to-hub:
@@ -11,7 +11,31 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true
-      - name: Push to hub
+          
+      - name: Inject HuggingFace Config and Push
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://Akshat185:$HF_TOKEN@huggingface.co/spaces/Akshat185/datascope main
+        run: |
+          # 1. Create the HuggingFace configuration block
+          echo "---" > temp_readme.md
+          echo "title: Datascope" >> temp_readme.md
+          echo "emoji: 📊" >> temp_readme.md
+          echo "colorFrom: blue" >> temp_readme.md
+          echo "colorTo: indigo" >> temp_readme.md
+          echo "sdk: docker" >> temp_readme.md
+          echo "pinned: false" >> temp_readme.md
+          echo "---" >> temp_readme.md
+          echo "" >> temp_readme.md
+          
+          # 2. Append your clean GitHub README below it
+          cat README.md >> temp_readme.md
+          mv temp_readme.md README.md
+          
+          # 3. Commit this change locally inside the GitHub runner
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git add README.md
+          git commit -m "Auto-inject HuggingFace configuration"
+          
+          # 4. Push this modified version to HuggingFace
+          git push --force https://Akshat185:$HF_TOKEN@huggingface.co/spaces/Akshat185/datascope HEAD:main
