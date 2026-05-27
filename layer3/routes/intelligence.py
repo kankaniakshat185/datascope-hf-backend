@@ -20,18 +20,23 @@ monitoring_engine = MonitoringEngine()
 
 # We need a quick baseline model generator for the root cause engine
 def _get_baseline_model(df, target_col, is_regression):
-    from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+    from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
     X = df.drop(columns=[target_col]).select_dtypes(include=['number']).fillna(0)
     y = df[target_col]
     if is_regression:
-        model = RandomForestRegressor(n_estimators=50, max_depth=5, random_state=42)
+        model = DecisionTreeRegressor(max_depth=5, random_state=42)
     else:
-        model = RandomForestClassifier(n_estimators=50, max_depth=5, random_state=42)
+        model = DecisionTreeClassifier(max_depth=5, random_state=42)
     model.fit(X, y)
     return model
 
 def run_root_cause_analysis(df: pd.DataFrame, target_col: str, problem_type: str):
     is_regression = problem_type.lower() == 'regression'
+    
+    # Downsample if too large to ensure fast clustering and KS tests
+    if len(df) > 2000:
+        df = df.sample(n=2000, random_state=42).copy()
+        
     model = _get_baseline_model(df, target_col, is_regression)
     
     # Run Root Cause

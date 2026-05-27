@@ -29,20 +29,20 @@ class BenchmarkEngine:
         self.random_state = random_state
         self.regression_registry = {
             "LinearRegression": LinearRegression(),
-            "RandomForest": RandomForestRegressor(n_estimators=50, random_state=random_state, n_jobs=-1)
+            "RandomForest": RandomForestRegressor(n_estimators=15, max_depth=5, random_state=random_state, n_jobs=-1)
         }
         self.classification_registry = {
-            "LogisticRegression": LogisticRegression(random_state=random_state, max_iter=500),
-            "RandomForest": RandomForestClassifier(n_estimators=50, random_state=random_state, n_jobs=-1)
+            "LogisticRegression": LogisticRegression(random_state=random_state, max_iter=200),
+            "RandomForest": RandomForestClassifier(n_estimators=15, max_depth=5, random_state=random_state, n_jobs=-1)
         }
         
         if XGBRegressor:
-            self.regression_registry["XGBoost"] = XGBRegressor(random_state=random_state, n_jobs=-1)
-            self.classification_registry["XGBoost"] = XGBClassifier(random_state=random_state, n_jobs=-1)
+            self.regression_registry["XGBoost"] = XGBRegressor(n_estimators=15, max_depth=5, random_state=random_state, n_jobs=-1)
+            self.classification_registry["XGBoost"] = XGBClassifier(n_estimators=15, max_depth=5, random_state=random_state, n_jobs=-1)
             
         if LGBMRegressor:
-            self.regression_registry["LightGBM"] = LGBMRegressor(random_state=random_state, n_jobs=-1)
-            self.classification_registry["LightGBM"] = LGBMClassifier(random_state=random_state, n_jobs=-1)
+            self.regression_registry["LightGBM"] = LGBMRegressor(n_estimators=15, max_depth=5, random_state=random_state, n_jobs=-1)
+            self.classification_registry["LightGBM"] = LGBMClassifier(n_estimators=15, max_depth=5, random_state=random_state, n_jobs=-1)
 
     def _inject_noise(self, X: pd.DataFrame, noise_level: float = 0.1) -> pd.DataFrame:
         """Injects Gaussian noise into numerical features to test robustness."""
@@ -56,6 +56,9 @@ class BenchmarkEngine:
     def run_benchmark(self, df: pd.DataFrame, target_col: str, problem_type: str = "regression") -> Dict[str, Any]:
         logger.info("Starting Benchmark Engine...")
         df = df.dropna(subset=[target_col])
+        if len(df) > 2000:
+            df = df.sample(n=2000, random_state=self.random_state)
+            
         X = df.drop(columns=[target_col]).select_dtypes(include=[np.number]).fillna(0)
         y = df[target_col]
         
