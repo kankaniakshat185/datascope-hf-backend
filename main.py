@@ -80,6 +80,27 @@ async def parse_uploaded_file(file: UploadFile) -> pd.DataFrame:
     return df
 
 from layer1.services.outlier_engine import compute_consensus
+import re
+
+def check_pii(col_series: pd.Series) -> bool:
+    sample = col_series.dropna().astype(str).head(100)
+    email_regex = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
+    ssn_regex = re.compile(r"^\d{3}-\d{2}-\d{4}$")
+    phone_regex = re.compile(r"^\+?1?\s*\(?-*\.*(\d{3})\)?\.*-*\s*(\d{3})\.*-*\s*(\d{4})$")
+    
+    for val in sample:
+        if email_regex.match(val) or ssn_regex.match(val) or phone_regex.match(val):
+            return True
+    return False
+
+def check_format_anomalies(col_series: pd.Series) -> bool:
+    sample = col_series.dropna().astype(str).head(100)
+    if len(sample) < 10: return False
+    
+    num_count = sum(1 for val in sample if val.replace('.','',1).isdigit())
+    if num_count > len(sample) * 0.8 and num_count < len(sample):
+        return True
+    return False
 
 def generate_data_dictionary(df: pd.DataFrame) -> dict:
     total_rows = len(df)
@@ -101,7 +122,10 @@ def generate_data_dictionary(df: pd.DataFrame) -> dict:
             "missing_count": missing_count,
             "missing_percentage": missing_percentage,
             "unique_count": unique_count,
-            "sample_values": sample_values
+            "sample_values": sample_values,
+            "pii_warning": False,
+            "imbalance_warning": False,
+            "format_warning": False
         }
         
         if pd.api.types.is_numeric_dtype(col_series):
@@ -124,6 +148,16 @@ def generate_data_dictionary(df: pd.DataFrame) -> dict:
         else:
             mode_val = col_series.mode()
             col_info["top_value"] = str(mode_val.iloc[0]) if not mode_val.empty else None
+            
+            # PII & Format Checks
+            col_info["pii_warning"] = check_pii(col_series)
+            col_info["format_warning"] = check_format_anomalies(col_series)
+            
+            # Class Imbalance Check (If < 20 categories, check if mode > 95%)
+            if 1 < unique_count <= 20 and not mode_val.empty:
+                mode_freq = (col_series == mode_val.iloc[0]).sum()
+                if mode_freq / len(col_series.dropna()) > 0.95:
+                    col_info["imbalance_warning"] = True
             
         dictionary.append(col_info)
         
