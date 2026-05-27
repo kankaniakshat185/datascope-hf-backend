@@ -59,7 +59,7 @@ class Client:
                 result = response.json()
                 
                 # Assuming the Next.js API returns the Prisma database ID of the result
-                job_id = result.get("id") or result.get("job_id")
+                job_id = result.get("datasetId") or result.get("id") or result.get("job_id")
                 
                 if not job_id:
                     print("⚠️ Success, but could not parse job_id from response.")
