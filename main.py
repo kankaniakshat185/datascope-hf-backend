@@ -7,6 +7,7 @@ from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.preprocessing import LabelEncoder
 from debugger import run_all_checks
 from layer1.api.router import router as layer1_router
+from layer3.routes.intelligence import router as layer3_router
 
 def get_target_column(df: pd.DataFrame) -> str:
     # Use valid clean columns 
@@ -45,6 +46,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(title="Dataset Debugger ML Service")
 app.include_router(layer1_router)
+app.include_router(layer3_router)
 
 # Enable CORS for Vercel Frontend
 app.add_middleware(
