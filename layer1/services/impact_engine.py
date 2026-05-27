@@ -73,6 +73,7 @@ def compute_causal_impact(df: pd.DataFrame, target_col: str, problem_type: str =
     # We estimate how much the feature influences the model's marginal prediction.
     logger.info("Computing Partial Dependence Variance...")
     variance_explained = {}
+    pdp_data = {}
     for i, feature in enumerate(X.columns):
         # Calculate PDP
         try:
@@ -80,12 +81,18 @@ def compute_causal_impact(df: pd.DataFrame, target_col: str, problem_type: str =
             # For multi-class, pd_results['average'] has shape (n_classes, n_values)
             # For regression / binary, it has shape (1, n_values)
             avg_pd = pd_results['average'][0]
+            grid_vals = pd_results['grid_values'][0]
             # Variance of the partial dependence line
             var_exp = np.var(avg_pd)
             variance_explained[feature] = float(var_exp)
+            pdp_data[feature] = {
+                "x": grid_vals.tolist(),
+                "y": avg_pd.tolist()
+            }
         except Exception as e:
             logger.warning(f"Failed to compute PDP for {feature}: {e}")
             variance_explained[feature] = 0.0
+            pdp_data[feature] = {"x": [], "y": []}
             
     # Combine everything into FeatureImpact schema format
     results = {}
@@ -93,7 +100,9 @@ def compute_causal_impact(df: pd.DataFrame, target_col: str, problem_type: str =
         results[feature] = {
             "importance_score": float(perm_scores.get(feature, 0.0)),
             "performance_impact": float(ablation_scores.get(feature, 0.0)),
-            "variance_explained": float(variance_explained.get(feature, 0.0))
+            "variance_explained": float(variance_explained.get(feature, 0.0)),
+            "pdp_x": pdp_data.get(feature, {}).get("x", []),
+            "pdp_y": pdp_data.get(feature, {}).get("y", [])
         }
         
     # Sort features by importance score

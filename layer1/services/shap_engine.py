@@ -103,6 +103,10 @@ def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str 
         cluster_shap_vals = shap_vals[mask]
         mean_abs_shap = np.abs(cluster_shap_vals).mean(axis=0)
         
+        total_shap = mean_abs_shap.sum()
+        if total_shap > 0:
+            mean_abs_shap = mean_abs_shap / total_shap
+        
         feature_importance = {feat: float(val) for feat, val in zip(X_sample.columns, mean_abs_shap)}
         sorted_feats = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
         top_features = [feat for feat, val in sorted_feats[:3]]
