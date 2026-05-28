@@ -85,7 +85,19 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         )
         
         final_arbitrated_issues = arbitration_result["arbitrated_issues"]
+        # 1.5 STATISTICAL LEAKAGE DETECTION
+        problem_type = "classification" if (df[target_column].nunique() < 20 or not pd.api.types.is_numeric_dtype(df[target_column])) else "regression"
         
+        from layer1.services.governance_scoring import detect_feature_leakage
+        leakage_analysis = detect_feature_leakage(
+            df=df,
+            target_col=target_column,
+            problem_type=problem_type,
+            feature_impacts=impact_data
+        )
+
+        worst_leakage_category = leakage_analysis.get("worst_category")
+
         # 2. PROBABILISTIC GOVERNANCE SCORING
         governance = calculate_governance_score(
             df,
@@ -96,7 +108,8 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
             runtime_ms=int((time.time() - start_time) * 1000),
             rows_processed=len(df),
             features_evaluated=len(df.columns),
-            worst_leakage_category=arbitration_result.get("worst_leakage_category")
+            worst_leakage_category=worst_leakage_category,
+            leakage_analysis=leakage_analysis
         )
 
         result = {

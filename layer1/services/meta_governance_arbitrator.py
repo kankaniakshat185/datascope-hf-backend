@@ -79,89 +79,11 @@ def arbitrate_governance_signals(
     
     for leaky_issue in raw_leakage_issues:
         col = leaky_issue.get("column", "")
-        if impact_data and col in impact_data:
-            feat_metrics = impact_data[col]
-            importance = feat_metrics.get("importance_score", 0)
-            ablation = feat_metrics.get("performance_impact", 0)
-            
-            # Additional semantic signals
-            vif = vif_scores.get(col, 1.0)
-            mi_score = mutual_info.get(col, 0.0)
-            max_corr = 0.0
-            if col in corr_matrix.columns:
-                max_corr = corr_matrix[col].drop(col, errors='ignore').max()
-                if pd.isna(max_corr): max_corr = 0.0
-                
-            redundancy_score = max(max_corr, min(vif / 10.0, 1.0))
-            
-            base_confidence = min(100, importance * 150)
-            
-            # Semantic Interpretation Matrix
-            if importance > 0.05 and ablation < 0.05 and redundancy_score > 0.7:
-                # CASE 2: REDUNDANT INFORMATIVE FEATURE
-                leaky_issue["severity"] = "LOW" # UI Color: Yellow/Greenish
-                leaky_issue["type"] = "redundant_informative"
-                leaky_issue["description"] = (
-                    "**CASE 2 — REDUNDANT INFORMATIVE FEATURE**\n\n"
-                    f"**What happened:** The trained model currently relies heavily on '{col}' (Permutation Impact: {importance:.2f}), "
-                    f"but its total removal barely harms performance (Ablation Drop: {ablation*100:.1f}%).\n\n"
-                    "**Why it happened:** This usually indicates feature redundancy. The dataset contains other features with overlapping "
-                    f"information (Max Correlation: {max_corr:.2f}, VIF: {vif:.1f}). Removing it allows the model to substitute it with alternatives.\n\n"
-                    "**Is this dangerous?:** No. This is normal statistical behavior. It is NOT leakage.\n\n"
-                    "**What to do next:** No immediate action required. You can optionally drop it to simplify the model."
-                )
-                leaky_issue["suggestion"] = "Learn More: [Feature Redundancy & Multicollinearity](https://en.wikipedia.org/wiki/Multicollinearity)"
-                leaky_issue["confidence"] = base_confidence * 0.9
-                arbitrated_issues.append(leaky_issue)
-                if worst_leakage_category not in ["B", "C", "D"]: worst_leakage_category = "A"
-
-            elif importance > 0.05 and ablation >= 0.05 and redundancy_score < 0.6:
-                # CASE 1: CORE STABLE FEATURE
-                leaky_issue["severity"] = "LOW" # UI Color: Green
-                leaky_issue["type"] = "core_stable_feature"
-                leaky_issue["description"] = (
-                    "**CASE 1 — CORE STABLE FEATURE**\n\n"
-                    f"**What happened:** This feature independently drives model performance (Permutation Impact: {importance:.2f}, Ablation Drop: {ablation*100:.1f}%).\n\n"
-                    "**Why it happened:** Removing this feature significantly harms the model because no alternative feature can fully replace "
-                    f"its predictive information (Redundancy Score: {redundancy_score:.2f}).\n\n"
-                    "**Is this dangerous?:** No. This is a foundational predictive feature. The model genuinely depends on it.\n\n"
-                    "**What to do next:** Keep this feature. It is highly valuable."
-                )
-                leaky_issue["suggestion"] = "Learn More: [Permutation Importance vs Feature Ablation](https://scikit-learn.org/stable/modules/permutation_importance.html)"
-                leaky_issue["confidence"] = base_confidence
-                arbitrated_issues.append(leaky_issue)
-                if worst_leakage_category not in ["C", "D"]: worst_leakage_category = "B"
-
-            elif importance > 0.20 and ablation >= 0.10 and mi_score > 0.5:
-                # CASE 3: POSSIBLE FEATURE LEAKAGE (Requires Consensus)
-                has_leakage = True
-                leakage_explanation = f"Cross-engine consensus confirms '{col}' unnaturally dictates model performance (Ablation Drop: {ablation*100:.1f}%, High Mutual Information)."
-                leaky_issue["severity"] = "CRITICAL" # UI Color: Red
-                leaky_issue["type"] = "feature_leakage"
-                leaky_issue["description"] = (
-                    "**CASE 3 — POSSIBLE FEATURE LEAKAGE**\n\n"
-                    f"**What happened:** This feature behaves too perfectly across multiple engines. It causes severe model collapse when removed (Ablation Drop: {ablation*100:.1f}%) "
-                    f"and holds unnatural statistical overlap with the target (Mutual Information: {mi_score:.2f}).\n\n"
-                    "**Why it happened:** The feature may directly encode or proxy the target variable, meaning it contains future information "
-                    "the model should not legitimately know at prediction time.\n\n"
-                    "**Is this dangerous?:** YES. The model will appear to perform perfectly in training, but fail completely in the real world.\n\n"
-                    "**What to do next:** Deployment Blocked. Remove this feature and retrain."
-                )
-                leaky_issue["suggestion"] = "Learn More: [Feature Leakage in Machine Learning](https://towardsdatascience.com/data-leakage-in-machine-learning-10bdd3eec742)"
-                leaky_issue["confidence"] = min(100, base_confidence * 1.5)
-                arbitrated_issues.append(leaky_issue)
-                worst_leakage_category = "D"
-            else:
-                # General Observation (Not strictly any case, but safe)
-                leaky_issue["severity"] = "LOW"
-                leaky_issue["description"] = f"**Informational:** '{col}' is highly correlated with the target, but lacks the extreme ablation sensitivity required to trigger a leakage consensus. Considered safe."
-                leaky_issue["suggestion"] = "Monitor. Strong predictors are good, but require cross-validation tracking."
-                arbitrated_issues.append(leaky_issue)
-        else:
-            leaky_issue["severity"] = "LOW"
-            leaky_issue["description"] = f"**Observation:** '{col}' is highly correlated with the target, but causal ablation data is unavailable. Weak leakage confidence without causal proof."
-            leaky_issue["suggestion"] = "Monitor. Strong predictors require ablation testing before governance escalation."
-            arbitrated_issues.append(leaky_issue)
+        # Since leakage is now handled by the dedicated statistical engine (detect_feature_leakage),
+        # we bypass the old Category A/B/C/D rules entirely.
+        leaky_issue["severity"] = "LOW"
+        leaky_issue["description"] = f"**Informational:** '{col}' flagged by legacy checks. Refer to the new Governance Leakage Engine for definitive arbitration."
+        arbitrated_issues.append(leaky_issue)
             
     # -------------------------------------------------------------
     # 2. Other Issues Arbitration
