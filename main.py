@@ -10,49 +10,9 @@ from layer1.api.router import router as layer1_router
 from layer1.services.job_manager import create_job, get_job, process_analysis_job
 from layer1.services.shap_engine import compute_segmented_shap
 
-def get_target_column(df: pd.DataFrame) -> str:
-    # Use valid clean columns 
-    valid_cols = [str(c) for c in df.columns if not str(c).startswith("Unnamed:")]
-    if not valid_cols:
-        return df.columns[-1]
+from layer1.services.target_profiler import compute_target_candidates, identify_potential_proxies
 
-    # 1. Exact matches for priority target names
-    priority_names = ["target", "label", "class", "outcome", "status", "price", "churn", "survived"]
-    for col in valid_cols:
-        if col.lower() in priority_names or col.lower() == "y": 
-            return col
-            
-    # 1.5. Partial matches for priority target names (avoids matching single 'y' in 'category')
-    for col in valid_cols:
-        if any(name in col.lower() for name in priority_names): 
-            return col
-
-    # 2. Heuristics fallback - Look for a neat binary classification target
-    for col in reversed(valid_cols):
-        if df[col].nunique() == 2 and not pd.api.types.is_float_dtype(df[col]):
-            return col
-
-    # 3. Numeric variables with enough continuous variance 
-    for col in reversed(valid_cols):
-        if pd.api.types.is_numeric_dtype(df[col]) and df[col].nunique() > 10:
-            if (df[col].isnull().sum() / len(df)) < 0.2:
-                return col
-
-    # 4. Fallback checking ID constraint (prefer numeric features)
-    for col in reversed(valid_cols):
-        nunique = df[col].nunique()
-        if (df[col].isnull().sum() / len(df)) > 0.5: continue
-        if pd.api.types.is_numeric_dtype(df[col]) and nunique >= 2 and not (nunique == len(df) and len(df) > 10):
-            return col
-            
-    # 5. Last resort fallback
-    for col in reversed(valid_cols):
-        nunique = df[col].nunique()
-        if (df[col].isnull().sum() / len(df)) > 0.5: continue
-        if nunique >= 2 and not (nunique == len(df) and len(df) > 10):
-            return col
-            
-    return valid_cols[-1]
+# Removed `get_target_column(df)` to enforce HUMAN-IN-THE-LOOP workflow.
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -229,14 +189,14 @@ def run_layer1_full(df: pd.DataFrame, target_column: str) -> dict:
     }
 
 @app.post("/analyze_async")
-async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadFile = File(...), target_column: str = Form(None)):
+async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadFile = File(...), target_column: str = Form(...)):
     """
     DataScope V2 Governance Endpoint
     Instantly returns a job_id and processes the ML validation in the background.
     """
     df = await parse_uploaded_file(file)
-    if not target_column:
-        target_column = get_target_column(df)
+    if not target_column or target_column not in df.columns:
+        raise HTTPException(status_code=400, detail="A valid target column must be explicitly selected.")
         
     job_id = create_job()
     
@@ -273,16 +233,57 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return clean_json_floats(job)
 
+@app.post("/profile-dataset")
+async def profile_dataset(file: UploadFile = File(...)):
+    """
+    Step 1: Parse the dataset and suggest ranked target candidates.
+    Does NOT start governance analysis.
+    """
+    try:
+        df = await parse_uploaded_file(file)
+        candidates = compute_target_candidates(df)
+        
+        # We also return the raw column names so the frontend can populate a dropdown
+        columns = [str(c) for c in df.columns if not str(c).startswith("Unnamed:")]
+        
+        return {
+            "columns": columns,
+            "ranked_candidates": candidates,
+            "total_rows": len(df),
+            "total_columns": len(columns)
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/analyze")
-async def analyze_dataset(file: UploadFile = File(...), rules: str = Form(None)):
+async def analyze_dataset(
+    file: UploadFile = File(...), 
+    rules: str = Form(None),
+    target_column: str = Form(...),
+    prediction_type: str = Form("Auto Detect"),
+    excluded_columns: str = Form("[]")
+):
+    """
+    Step 2: Receives the EXPLICITLY confirmed target and settings to begin the governance job.
+    """
     try:
         df = await parse_uploaded_file(file)
         
+        # Process exclusions
+        import json
+        exclusions = json.loads(excluded_columns)
+        if exclusions:
+            df = df.drop(columns=[col for col in exclusions if col in df.columns], errors='ignore')
+            
+        if target_column not in df.columns:
+            raise HTTPException(status_code=400, detail=f"Confirmed target column '{target_column}' not found in dataset.")
+
         # Parse rules
         parsed_rules = []
         if rules:
             try:
-                import json
                 parsed_rules = json.loads(rules)
             except Exception:
                 pass
@@ -290,10 +291,8 @@ async def analyze_dataset(file: UploadFile = File(...), rules: str = Form(None))
         # Attempt clean
         df = df.dropna(axis=1, how='all')
 
-        # Advanced target detection algorithm
-        target_col = get_target_column(df)
-
-        results = run_all_checks(df, target_col, parsed_rules)
+        # We pass the confirmed target. (Prediction type can be passed to checks if needed in future)
+        results = run_all_checks(df, target_column, parsed_rules)
         return results
         
     except HTTPException as he:
@@ -477,11 +476,12 @@ def generate_shap_values(df: pd.DataFrame, target_col: str) -> dict:
         return {"error": str(e)}
 
 @app.post("/shap")
-async def get_shap_values(file: UploadFile = File(...)):
+async def get_shap_values(file: UploadFile = File(...), target_column: str = Form(...)):
     try:
         df = await parse_uploaded_file(file)
-        target_col = get_target_column(df)
-        return generate_shap_values(df, target_col)
+        if not target_column or target_column not in df.columns:
+            raise HTTPException(status_code=400, detail="A valid target column must be explicitly selected.")
+        return generate_shap_values(df, target_column)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
