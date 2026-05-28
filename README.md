@@ -1,74 +1,106 @@
+# DataScope: The Machine Learning Observability Platform
 
-
-# DataScope 
+[![PyPI version](https://badge.fury.io/py/datascope-ml.svg)](https://pypi.org/project/datascope-ml/)
 
 ![DataScope Dashboard](https://github.com/kankaniakshat185/datascope-app-frontend/blob/main/hero.png)
 
-A robust, intelligent machine learning dataset evaluation and debugging backend built in FastAPI. It automatically detects dataset issues, calculates precise ML impact scores through dynamic baseline modeling, and provides configurable, consensus-driven data-cleaning and drift-detection pipelines.
+A robust, enterprise-grade machine learning dataset evaluation and debugging platform. It automatically detects dataset issues, calculates precise ML impact scores through dynamic baseline modeling, and provides configurable, consensus-driven data-cleaning and drift-detection pipelines.
+
+Beyond a simple web dashboard, **DataScope is a complete Developer Platform**, offering a fully-fledged Python SDK (`datascope-ml`) that allows data scientists to trigger complex remote ML analytics directly from their Jupyter Notebooks or terminals.
 
 <div align="center">
 
-[Features](#features) • [Live Access & Docs](#live-access--docs) • [Architecture](#architecture) • [Layer 1 Engines](#layer-1-engines) • [Benchmarks](#benchmarks--optimizations) • [API Reference](#api-reference)
+[The Python SDK](#the-python-sdk) • [Security & Privacy](#security--privacy) • [Architecture](#architecture) • [Key Features](#key-features) • [Layer 1 Engines](#layer-1-engines) • [API Reference](#api-reference)
 
 </div>
 
 ---
 
-## Key Features
+## The Python SDK (`datascope-ml`)
 
-- **Advanced Drift Detection** — Detects concept drift by concurrently calculating **Population Stability Index (PSI)**, **Kullback-Leibler (KL) Divergence**, **Wasserstein Distance**, and **Kolmogorov-Smirnov (KS) Statistics** to ensure absolute certainty.
-- **Causal Impact & Feature Ablation** — Quantifies exact performance drops and variance explained by systematically ablating features, evaluating partial dependence (PDP), and calculating permutation importance.
-- **Segmented Model Intelligence (SHAP)** — Computes Random Forest-based feature importances and SHAP-like segmented insights, specifically optimized for serverless deployments.
-- **5-Step Dynamic Auto-Clean Pipeline** — A highly configurable pipeline builder that executes 5 critical steps: `impute_missing`, `remove_outliers`, `encode_categorical`, `drop_missing`, and `scale_features`.
-- **Interactive Data Dictionary & EDA Dashboard** — Instantly generates rich column-level metadata, univariate outlier percentages, distribution bins, value counts, and correlation matrices for the frontend dashboard.
-- **Consensus Outlier Detection** — Uses a multi-model weighted approach (Z-Score, MAD, Isolation Forest, DBSCAN) to robustly flag data anomalies.
-- **Secure Vault Feature** — Securely persists historical data analyses with intelligent search deletion and complete database cascading.
+Why leave your IDE to clean your data? The official DataScope PyPI package bridges the gap between local data engineering workflows and our heavy-compute cloud infrastructure.
 
-## Live Access & Docs
+### Installation
+```bash
+pip install datascope-ml
+```
 
-Skip the local setup. DataScope is fully deployed and ready to use. 
+### Usage
+Generate your personal **SDK Key** securely from your DataScope web vault, and authenticate your local scripts:
 
-- **Live Platform**: [Access DataScope](<https://datascope-app.vercel.app/>)
-- **Interactive API Documentation**: Explore the backend schemas and test endpoints directly via the [FastAPI Swagger Docs](<https://akshat185-datascope.hf.space/docs>).
+```python
+import datascope
+import pandas as pd
 
+# 1. Initialize the SDK with your API Key
+client = datascope.Client(api_key="ds_your_generated_sdk_key_here")
+
+# 2. Load your data
+df = pd.read_csv("my_dataset.csv")
+
+# 3. Analyze it!
+client.analyze(df, project_name="Churn_Model_V2")
+```
+
+**What happens next?** 
+The SDK securely streams your data to the cloud engines, processes the anomalies, and instantly pops open an interactive web dashboard in your browser with the full mathematical breakdown of your data health.
+
+---
+
+## Security & Privacy
+
+DataScope is designed with privacy-first principles:
+- **Zero-Disk Storage Policy**: When using the SDK, your local dataset is never saved as a temporary file on your hard drive. It is converted to an in-memory `io.StringIO` buffer and streamed directly to the cloud.
+- **Cryptographic API Management**: SDK authentication is handled via a secure, singleton API Key system linked directly to your account using industry-standard `Bearer` tokens. Your generated key is uniquely tied to your PostgreSQL user ID.
+- **Data Ephemerality**: By default, datasets are processed in memory on our HuggingFace backend and immediately discarded after the analytical results are generated and stored.
+
+---
 
 ## Architecture
 
-The system utilizes a structured Layer 1 service architecture to orchestrate dynamic pipelines and analytical engines:
+The system utilizes a structured, decoupled architecture orchestrating the frontend gateway and the analytical Python engines:
 
 ```mermaid
 graph TD
-    A[FastAPI Endpoints] --> B(Layer 1: Router)
+    User([Data Scientist]) -->|pip install datascope-ml| SDK(Python PyPI SDK)
+    User -->|Web Login| Dashboard(Next.js Web UI)
     
-    B --> C(Pipeline Engine: 5-Step Clean)
-    B --> D(Drift Engine: PSI, KL, KS, Wasserstein)
-    B --> E(SHAP & Causal Impact Engine)
+    SDK -->|Bearer Token Auth| API(Next.js API Gateway)
+    Dashboard -->|Session Auth| API
     
-    C --> F(Outlier Engine)
-    F -->|Consensus: Z-Score, MAD, iForest, DBSCAN| G[Clean Data]
+    API <-->|Prisma ORM| DB[(Neon Postgres Database)]
+    API <-->|Concurrent REST| Fast(FastAPI ML Backend)
     
-    H(Debugger Orchestrator) --> I[Validators]
-    H --> J[ML Checks]
+    Fast --> C(Pipeline Engine)
+    Fast --> D(Drift Engine: PSI, KL, KS, Wasserstein)
+    Fast --> E(SHAP & Causal Impact Engine)
     
-    I --> K{Impact Engine}
-    J --> K
+    C --> F(Outlier Consensus Engine)
+    F -->|Z-Score, MAD, iForest, DBSCAN| G[Clean Data]
     
-    K --> L[Feature Ablation & Causal Drop]
-    K --> M[Simulated Fix]
-    
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style F fill:#bfb,stroke:#333,stroke-width:2px
-    style K fill:#bbf,stroke:#333,stroke-width:2px
+    style API fill:#f9f,stroke:#333,stroke-width:2px
+    style Fast fill:#bfb,stroke:#333,stroke-width:2px
 ```
+
+---
+
+## Key Features
+
+- **Python SDK Ecosystem** — Seamlessly trigger cloud analytics directly from local Jupyter Notebooks using the `datascope-ml` package.
+- **Semantic PII Detection** — Intelligently scans columns using Regex and natural language heuristics to flag sensitive Personal Identifiable Information (SSNs, emails) and extreme class imbalances.
+- **Export to Python** — Instantly generates copy-pasteable `pandas` and `scikit-learn` code snippets directly from the UI, applying the exact mathematical fixes recommended by the engines.
+- **Advanced Drift Detection** — Detects concept drift by concurrently calculating **Population Stability Index (PSI)**, **Kullback-Leibler (KL) Divergence**, **Wasserstein Distance**, and **Kolmogorov-Smirnov (KS) Statistics** to ensure absolute certainty.
+- **Causal Impact & Feature Ablation** — Quantifies exact performance drops and variance explained by systematically ablating features, evaluating partial dependence (PDP), and calculating permutation importance.
+- **Consensus Outlier Detection** — Uses a multi-model weighted approach (Z-Score, MAD, Isolation Forest, DBSCAN) to robustly flag data anomalies, eliminating false positives.
+- **Segmented Model Intelligence (SHAP)** — Computes Random Forest-based feature importances and SHAP-like segmented insights, specifically optimized for serverless deployments.
+- **5-Step Dynamic Auto-Clean Pipeline** — A highly configurable pipeline builder that executes 5 critical steps: `impute_missing`, `remove_outliers`, `encode_categorical`, `drop_missing`, and `scale_features`.
+
+---
 
 ## Layer 1 Engines
 
 ### Drift Engine (`layer1/services/drift_engine.py`)
-Detects concept drift by comparing an uploaded test dataset against training data distributions. To guarantee accuracy, it goes beyond simple binning by concurrently running **4 different statistical methods**:
-1. Population Stability Index (PSI)
-2. Kullback-Leibler (KL) Divergence
-3. Wasserstein Distance (Earth Mover's Distance)
-4. Kolmogorov-Smirnov (KS) Statistic and P-Value
+Detects concept drift by comparing an uploaded test dataset against training data distributions. To guarantee accuracy, it goes beyond simple binning by concurrently running **4 different statistical methods**.
 
 ### Impact Engine (`layer1/services/impact_engine.py`)
 Quantifies the severity of data issues by dynamically training baseline models (`scikit-learn`). 
@@ -76,44 +108,12 @@ Quantifies the severity of data issues by dynamically training baseline models (
 - **Feature Ablation**: Measures exact performance drops (e.g., in R² or Accuracy) by removing features one at a time and retraining.
 
 ### Pipeline Engine (`layer1/services/pipeline_engine.py`)
-A dynamic, JSON-configurable **5-Step Pipeline Builder** (`DataPipeline`) that guarantees reproducible data transformation steps and maintains execution logs. The 5 core steps are:
-1. `impute_missing`: Mean, median, or mode strategies.
-2. `remove_outliers`: Connects directly to the Consensus Outlier Engine.
-3. `encode_categorical`: Label or One-Hot encoding.
-4. `drop_missing`: Drops columns exceeding a configurable missing ratio threshold.
-5. `scale_features`: Standard or Min-Max scaling.
+A dynamic, JSON-configurable **5-Step Pipeline Builder** (`DataPipeline`) that guarantees reproducible data transformation steps and maintains execution logs.
 
 ### Outlier Engine (`layer1/services/outlier_engine.py`)
-Replaces naive statistical bounds with a highly robust **Consensus Algorithm**. It runs four independent anomaly detection methods concurrently and aggregates them into a normalized consensus score:
-1. **Statistical**: Z-Score and MAD Score (Median Absolute Deviation).
-2. **Machine Learning**: Isolation Forest (Tree-based) and DBSCAN (Density-based clustering).
+Replaces naive statistical bounds with a highly robust **Consensus Algorithm**. It runs four independent anomaly detection methods concurrently and aggregates them into a normalized consensus score.
 
-### SHAP / Model Intelligence Engine (`layer1/services/shap_engine.py`)
-Provides segmented model intelligence. It quickly calculates native Random Forest feature importances mimicking SHAP behaviors, intentionally optimized for low-memory overhead to support HuggingFace Spaces deployments.
-
-## Benchmarks & Optimizations
-
-- **HuggingFace Spaces Optimization**: Native `scikit-learn` feature importances are utilized in the SHAP Engine instead of the heavy `shap` library, saving over **200MB+** of RAM and allowing the intelligence engine to run smoothly within strict HuggingFace memory constraints.
-- **Vectorized Drift Computation**: PSI, Kullback-Leibler, and Wasserstein distance calculations are fully vectorized using NumPy and SciPy, ensuring near-instantaneous execution even on large production datasets.
-- **Zero-Disk I/O Auto-Cleaning**: The 5-Step Pipeline Engine processes and returns cleaned datasets via an in-memory `io.StringIO` stream, eliminating disk write latencies.
-
-## Project Structure
-
-```text
-├── main.py                          # FastAPI server, CORS, Data Dictionary & EDA logic
-├── layer1/
-│   ├── api/router.py                # Layer 1 endpoint routing
-│   └── services/
-│       ├── pipeline_engine.py       # 5-Step Dynamic auto-clean pipeline builder
-│       ├── outlier_engine.py        # Consensus-based anomaly detection
-│       ├── drift_engine.py          # 4-method data drift calculation (PSI, KL, Wasserstein, KS)
-│       ├── shap_engine.py           # Segmented model intelligence
-│       └── impact_engine.py         # Causal impact and feature ablation
-├── debugger.py                      # Orchestrates validators and ML checks
-├── ml_checks.py                     # Advanced machine learning-specific validations
-├── validators.py                    # Core statistical and structural dataset checks
-└── suggestions.py                   # Formats actionable suggestions for the frontend
-```
+---
 
 ## API Reference
 
@@ -127,4 +127,3 @@ Provides segmented model intelligence. It quickly calculates native Random Fores
 ## License
 
 MIT
-
