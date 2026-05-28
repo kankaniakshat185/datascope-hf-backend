@@ -33,24 +33,37 @@ def update_job(job_id: str, status: str, progress: int, stage: str = None, resul
 def get_job(job_id: str) -> Dict[str, Any]:
     return jobs_store.get(job_id, {"error": "Job not found", "status": "FAILED"})
 
-def process_analysis_job(job_id: str, df, target_column, run_checks_func):
+def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_func, eda_func, shap_func, layer1_func):
     """
     The background task that runs the heavy ML computation.
     """
     try:
         update_job(job_id, "PROCESSING", 10, "Starting ML Validations...")
-        
-        # Simulate minor delay for orchestrated observability
-        time.sleep(1) 
-        update_job(job_id, "PROCESSING", 30, "Training Baseline & Impact Engines...")
-        
-        # Run the heavy computation
         issues = run_checks_func(df, target_column)
         
-        update_job(job_id, "PROCESSING", 90, "Finalizing Governance Metrics...")
-        time.sleep(1)
+        update_job(job_id, "PROCESSING", 30, "Generating Data Dictionary...")
+        dict_data = dict_func(df)
+        
+        update_job(job_id, "PROCESSING", 50, "Generating EDA Visualizations...")
+        eda_data = eda_func(df)
+        
+        update_job(job_id, "PROCESSING", 70, "Training Segmented SHAP Intelligence...")
+        shap_data = shap_func(df, target_column)
+        
+        update_job(job_id, "PROCESSING", 90, "Finalizing Consensus Governance Metrics...")
+        layer1_data = layer1_func(df, target_column)
 
-        update_job(job_id, "COMPLETED", 100, "Done", result={"issues": issues})
+        result = {
+            "issues": issues,
+            "dictData": dict_data,
+            "edaData": eda_data,
+            "shapData": shap_data,
+            "layer1Data": layer1_data
+        }
+
+        update_job(job_id, "COMPLETED", 100, "Done", result=result)
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(f"Job {job_id} failed: {str(e)}")
         update_job(job_id, "FAILED", 0, "Failed", error=str(e))

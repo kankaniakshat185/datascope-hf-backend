@@ -167,6 +167,79 @@ def generate_data_dictionary(df: pd.DataFrame) -> dict:
         "columns": dictionary
     }
 
+from layer1.services.outlier_engine import compute_consensus
+from layer1.services.impact_engine import compute_causal_impact
+from layer1.services.pipeline_engine import build_and_run_pipeline
+
+def run_layer1_full(df: pd.DataFrame, target_column: str) -> dict:
+    # 1. Outlier Analysis
+    outlier_results, outlier_summary = compute_consensus(df)
+    row_res = {}
+    outliers_only = outlier_results[outlier_results['is_outlier'] == True].head(100)
+    for idx, row in outliers_only.iterrows():
+        row_res[int(idx)] = {
+            "is_outlier": bool(row["is_outlier"]),
+            "consensus_score": float(row["consensus_score"]),
+            "method_scores": {
+                "z_score": float(row["z_score"]),
+                "mad_score": float(row["mad_score"]),
+                "isolation_forest": int(row["isolation_forest"]),
+                "dbscan": int(row["dbscan"])
+            }
+        }
+        
+    outlier_response = {
+        "summary": outlier_summary,
+        "row_results": row_res
+    }
+    
+    # 2. Causal-Aware Impact Analysis
+    try:
+        impact_features, impact_insights = compute_causal_impact(df, target_column, problem_type='regression')
+        impact_response = {
+            "features": impact_features,
+            "insights": impact_insights
+        }
+    except Exception as e:
+        impact_response = {"error": str(e)}
+
+    # Mock pipeline logs
+    _, pipeline_logs = build_and_run_pipeline(df, config=[
+        {"step": "impute_missing", "params": {"strategy": "median"}}
+    ])
+    
+    return {
+        "outlier_analysis": outlier_response,
+        "feature_importance": impact_response,
+        "pipeline_log": pipeline_logs
+    }
+
+@app.post("/analyze_async")
+async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadFile = File(...), target_column: str = Form(None)):
+    """
+    DataScope V2 Governance Endpoint
+    Instantly returns a job_id and processes the ML validation in the background.
+    """
+    df = await parse_uploaded_file(file)
+    if not target_column:
+        target_column = get_target_column(df)
+        
+    job_id = create_job()
+    
+    background_tasks.add_task(
+        process_analysis_job, 
+        job_id, 
+        df, 
+        target_column, 
+        run_all_checks, 
+        generate_data_dictionary, 
+        generate_eda_data, 
+        generate_shap_values, 
+        run_layer1_full
+    )
+    
+    return {"job_id": job_id, "status": "QUEUED"}
+
 @app.post("/analyze")
 async def analyze_dataset(file: UploadFile = File(...), rules: str = Form(None)):
     try:
