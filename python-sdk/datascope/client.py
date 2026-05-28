@@ -22,15 +22,16 @@ class Client:
         self.api_key = api_key
         self.base_url = base_url.rstrip('/')
         
-    def analyze(self, df: pd.DataFrame, project_name: str = "my_dataset", target_column: Optional[str] = None):
+    def analyze(self, df: pd.DataFrame, target_column: str, prediction_type: str, project_name: str = "my_dataset"):
         """
         Uploads the dataframe to DataScope, runs full Layer 1 & 2 analytics, 
         and automatically opens the results dashboard in your browser.
         
         Args:
             df: The pandas DataFrame to analyze.
+            target_column: The target variable for prediction.
+            prediction_type: The type of prediction ('classification', 'regression', or 'Auto Detect').
             project_name: A human-readable name for this dataset.
-            target_column: The target variable for prediction (optional).
         """
         print(f"🚀 Initializing DataScope audit for project: '{project_name}'")
         print(f"📊 Dataset size: {df.shape[0]} rows, {df.shape[1]} columns")
@@ -43,6 +44,10 @@ class Client:
         files = {
             'file': (f"{project_name}.csv", csv_buffer.getvalue(), 'text/csv')
         }
+        data = {
+            'target_column': target_column,
+            'prediction_type': prediction_type
+        }
         
         headers = {}
         if self.api_key:
@@ -53,7 +58,7 @@ class Client:
         try:
             # Point this to the Next.js API route that handles upload orchestration
             # NOTE: For local development, this is likely http://localhost:3000/api/upload
-            response = requests.post(f"{self.base_url}/api/upload", files=files, headers=headers)
+            response = requests.post(f"{self.base_url}/api/upload", files=files, data=data, headers=headers)
             
             if response.status_code == 200:
                 result = response.json()
