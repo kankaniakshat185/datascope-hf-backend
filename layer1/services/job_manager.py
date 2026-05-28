@@ -76,6 +76,8 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         impact_data = layer1_data.get("feature_importance", {}).get("features", {}) if layer1_data else {}
         
         arbitration_result = arbitrate_governance_signals(
+            df=df,
+            target_column=target_column,
             ml_issues=actual_issues,
             outlier_pct=outlier_pct,
             shap_insights=shap_data.get("insights", []),

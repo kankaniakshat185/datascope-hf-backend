@@ -196,27 +196,47 @@ def calculate_governance_score(
     retraining_required = (stability_score < 68.0) or shap_leakage or (outlier_pct > 12.0)
 
     final_status = "APPROVED" if deployment_ready else ("REJECTED" if governance_score < 65.0 or stability_score < 55.0 else "AWAITING_REVIEW")
-    
+
     if final_status == "REJECTED":
         audit_logs.append({
             "phase": "GOVERNANCE PHASE",
             "rule": "DEPLOYMENT_BLOCKED",
             "severity": "CRITICAL",
-            "message": f"Deployment approval withheld. Calibrated governance score {governance_score}/100 indicates unacceptable residual risk."
+            "message": (
+                "**Deployment Blocked by Governance Consensus**\n\n"
+                "**What happened:** The engine rejected deployment (Governance Score: " + str(governance_score) + "/100).\n"
+                "**Why it matters:** Deployment of this model carries unacceptable risk, likely due to confirmed feature leakage or massive anomaly contamination.\n"
+                "**Action required:** You must remove the leaking features or clean the corrupted rows before this model can be safely trained.\n"
+                "**Confidence level:** HIGH. Multiple engines agree."
+            )
         })
     elif final_status == "AWAITING_REVIEW":
         audit_logs.append({
             "phase": "GOVERNANCE PHASE",
             "rule": "GOVERNANCE_REVIEW_STARTED",
             "severity": "WARNING",
-            "message": f"Manual arbitration suggested. Governance score stands at {governance_score}/100. Observational concerns warrant review."
+            "message": (
+                "**Manual Governance Arbitration Required**\n\n"
+                "**What happened:** The engine placed this model in AWAITING_REVIEW status (Governance Score: " + str(governance_score) + "/100).\n"
+                "**Why it matters:** We detected observational concerns (like extreme feature overlap or moderate data contamination) that aren't catastrophic, but require human sign-off.\n"
+                "**Action required:** Review the highlighted yellow/orange warnings in the dashboard. If acceptable, you can manually override.\n"
+                "**Confidence level:** MODERATE."
+            )
         })
     else:
         audit_logs.append({
             "phase": "GOVERNANCE PHASE",
             "rule": "GOVERNANCE_APPROVED",
             "severity": "SUCCESS",
-            "message": f"Deployment conditionally approved. Governance Score: {governance_score}/100. Stability Profile: {stability_score}/100."
+            "message": (
+                "**Governance Approved**\n\n"
+                "**Why it was approved:**\n"
+                "- No causal feature leakage consensus detected.\n"
+                "- Feature redundancy remained within acceptable bounds.\n"
+                "- Anomaly consensus remained low.\n"
+                "- Model stability stayed above production threshold.\n\n"
+                "**Confidence level:** HIGH."
+            )
         })
         
     if retraining_required:
@@ -224,7 +244,12 @@ def calculate_governance_score(
             "phase": "GOVERNANCE PHASE",
             "rule": "RETRAINING_RECOMMENDED",
             "severity": "HIGH",
-            "message": "Retraining loop suggested due to observable deviations in cross-engine stability metrics."
+            "message": (
+                "**Retraining Loop Suggested**\n\n"
+                "**What happened:** The model's baseline stability is compromised.\n"
+                "**Why it matters:** The current feature set has structural issues that prevent robust real-world generalization.\n"
+                "**Action required:** Apply the suggested remediations and retrain the baseline model."
+            )
         })
 
     return {
