@@ -5,12 +5,15 @@ from sklearn.inspection import permutation_importance, partial_dependence
 from sklearn.metrics import r2_score, accuracy_score
 from typing import Dict, Any, Tuple
 import logging
+from layer1.services.governance_scoring import detect_identifier_columns
 
 logger = logging.getLogger(__name__)
 
 def train_baseline_model(df: pd.DataFrame, target_col: str, problem_type: str):
     """Trains a baseline Random Forest model."""
+    identifier_columns = detect_identifier_columns(df)
     X = df.drop(columns=[target_col]).select_dtypes(include=[np.number])
+    X = X.drop(columns=identifier_columns, errors="ignore")
     y = df[target_col]
     
     if problem_type == 'regression':
