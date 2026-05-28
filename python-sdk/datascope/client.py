@@ -10,7 +10,7 @@ class Client:
     Connects your local Jupyter Notebooks or Python IDEs directly to the DataScope platform.
     """
     
-    def __init__(self, api_key: str = None, base_url: str = "https://your-frontend-domain.com"):
+    def __init__(self, api_key: str = None, base_url: str = "https://datascope-app.vercel.app"):
         """
         Initialize the DataScope client.
         
