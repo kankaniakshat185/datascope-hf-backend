@@ -33,13 +33,14 @@ def update_job(job_id: str, status: str, progress: int, stage: str = None, resul
 def get_job(job_id: str) -> Dict[str, Any]:
     return jobs_store.get(job_id, {"error": "Job not found", "status": "FAILED"})
 
-from layer1.services.governance_engine import evaluate_governance_rules
+from layer1.services.governance_scoring import calculate_governance_score
 
 def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_func, eda_func, shap_func, layer1_func):
     """
     The background task that runs the heavy ML computation.
     """
     try:
+        start_time = time.time()
         update_job(job_id, "PROCESSING", 10, "Starting ML Validations...")
         issues = run_checks_func(df, target_column)
         
@@ -66,7 +67,14 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         update_job(job_id, "PROCESSING", 95, "Running Deterministic Governance Rules...")
         # Note: issues is a dict like {"issues": [...], "total_impact": X}
         actual_issues = issues.get("issues", []) if isinstance(issues, dict) else issues
-        governance = evaluate_governance_rules(actual_issues, layer1_data, shap_data)
+        governance = calculate_governance_score(
+            actual_issues, 
+            layer1_data, 
+            shap_data,
+            runtime_ms=int((time.time() - start_time) * 1000),
+            rows_processed=len(df),
+            features_evaluated=len(df.columns)
+        )
 
         result = {
             "issues": issues,
