@@ -20,11 +20,7 @@ Beyond a simple web dashboard, **DataScope is a complete Developer Platform**, o
 
 DataScope natively supports a strict, deterministic **Three-State Arbitration Engine** acting as the single source of truth for deployment readiness. The system eliminates arbitrary threshold logic and assigns definitive states backed by mathematical consensus:
 
-<div align="center">
-  <img src="https://github.com/kankaniakshat185/datascope-hf-backend/blob/main/approved.png" width="33%" alt="Approved State" />
-  <img src="https://github.com/kankaniakshat185/datascope-hf-backend/blob/main/review_required.png" width="33%" alt="Review Required State" />
-  <img src="https://github.com/kankaniakshat185/datascope-hf-backend/blob/main/blocked.png" width="33%" alt="Blocked State" />
-</div>
+
 
 1. **APPROVED (Ready)**: The dataset is structurally pristine, devoid of catastrophic data leakage, and exhibits high multi-model stability.
 2. **AWAITING_REVIEW (Review Required)**: The engine detects moderate structural anomalies or moderate predictive redundancy requiring human semantic arbitration.
