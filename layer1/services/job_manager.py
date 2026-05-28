@@ -33,6 +33,8 @@ def update_job(job_id: str, status: str, progress: int, stage: str = None, resul
 def get_job(job_id: str) -> Dict[str, Any]:
     return jobs_store.get(job_id, {"error": "Job not found", "status": "FAILED"})
 
+from layer1.services.governance_engine import evaluate_governance_rules
+
 def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_func, eda_func, shap_func, layer1_func):
     """
     The background task that runs the heavy ML computation.
@@ -48,17 +50,31 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         eda_data = eda_func(df)
         
         update_job(job_id, "PROCESSING", 70, "Training Segmented SHAP Intelligence...")
-        shap_data = shap_func(df, target_column)
+        shap_raw = shap_func(df, target_column)
+        shap_data = {}
+        if isinstance(shap_raw, tuple) and len(shap_raw) == 2:
+            shap_data = {"clusters": shap_raw[0], "insights": shap_raw[1]}
+        elif isinstance(shap_raw, dict):
+            shap_data = shap_raw
+        else:
+            shap_data = {"error": "Invalid SHAP response"}
+
         
         update_job(job_id, "PROCESSING", 90, "Finalizing Consensus Governance Metrics...")
         layer1_data = layer1_func(df, target_column)
+        
+        update_job(job_id, "PROCESSING", 95, "Running Deterministic Governance Rules...")
+        # Note: issues is a dict like {"issues": [...], "total_impact": X}
+        actual_issues = issues.get("issues", []) if isinstance(issues, dict) else issues
+        governance = evaluate_governance_rules(actual_issues, layer1_data, shap_data)
 
         result = {
             "issues": issues,
             "dictData": dict_data,
             "edaData": eda_data,
             "shapData": shap_data,
-            "layer1Data": layer1_data
+            "layer1Data": layer1_data,
+            "governance": governance
         }
 
         update_job(job_id, "COMPLETED", 100, "Done", result=result)

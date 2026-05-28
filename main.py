@@ -8,6 +8,7 @@ from sklearn.preprocessing import LabelEncoder
 from debugger import run_all_checks
 from layer1.api.router import router as layer1_router
 from layer1.services.job_manager import create_job, get_job, process_analysis_job
+from layer1.services.shap_engine import compute_segmented_shap
 
 def get_target_column(df: pd.DataFrame) -> str:
     # Use valid clean columns 
@@ -234,7 +235,7 @@ async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadF
         run_all_checks, 
         generate_data_dictionary, 
         generate_eda_data, 
-        generate_shap_values, 
+        compute_segmented_shap, 
         run_layer1_full
     )
     
