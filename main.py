@@ -240,12 +240,24 @@ async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadF
     
     return {"job_id": job_id, "status": "QUEUED"}
 
+import math
+
+def clean_json_floats(obj):
+    if isinstance(obj, dict):
+        return {k: clean_json_floats(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [clean_json_floats(v) for v in obj]
+    elif isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+    return obj
+
 @app.get("/job/{job_id}")
 async def get_job_status(job_id: str):
     job = get_job(job_id)
     if job.get("error") == "Job not found":
         raise HTTPException(status_code=404, detail="Job not found")
-    return job
+    return clean_json_floats(job)
 
 @app.post("/analyze")
 async def analyze_dataset(file: UploadFile = File(...), rules: str = Form(None)):
