@@ -24,7 +24,7 @@ class OutlierAnalysisResponse(BaseModel):
 class FeatureImpact(BaseModel):
     importance_score: float
     performance_impact: float
-    variance_explained: float
+    marginal_effect_strength: float
 
 class CausalImpactResponse(BaseModel):
     features: Dict[str, FeatureImpact]
