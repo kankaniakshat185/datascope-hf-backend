@@ -240,6 +240,13 @@ async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadF
     
     return {"job_id": job_id, "status": "QUEUED"}
 
+@app.get("/job/{job_id}")
+async def get_job_status(job_id: str):
+    job = get_job(job_id)
+    if job.get("error") == "Job not found":
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
 @app.post("/analyze")
 async def analyze_dataset(file: UploadFile = File(...), rules: str = Form(None)):
     try:
