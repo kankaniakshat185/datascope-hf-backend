@@ -16,12 +16,16 @@ def get_target_column(df: pd.DataFrame) -> str:
     if not valid_cols:
         return df.columns[-1]
 
-    # 1. Names indicating a target specifically
-    priority_names = ["target", "label", "class", "y", "outcome", "status", "price", "churn", "survived"]
+    # 1. Exact matches for priority target names
+    priority_names = ["target", "label", "class", "outcome", "status", "price", "churn", "survived"]
     for col in valid_cols:
-        if col.lower() in priority_names: return col
+        if col.lower() in priority_names or col.lower() == "y": 
+            return col
+            
+    # 1.5. Partial matches for priority target names (avoids matching single 'y' in 'category')
     for col in valid_cols:
-        if any(name in col.lower() for name in priority_names): return col
+        if any(name in col.lower() for name in priority_names): 
+            return col
 
     # 2. Heuristics fallback - Look for a neat binary classification target
     for col in reversed(valid_cols):
@@ -34,7 +38,14 @@ def get_target_column(df: pd.DataFrame) -> str:
             if (df[col].isnull().sum() / len(df)) < 0.2:
                 return col
 
-    # 4. Fallback checking ID constraint
+    # 4. Fallback checking ID constraint (prefer numeric features)
+    for col in reversed(valid_cols):
+        nunique = df[col].nunique()
+        if (df[col].isnull().sum() / len(df)) > 0.5: continue
+        if pd.api.types.is_numeric_dtype(df[col]) and nunique >= 2 and not (nunique == len(df) and len(df) > 10):
+            return col
+            
+    # 5. Last resort fallback
     for col in reversed(valid_cols):
         nunique = df[col].nunique()
         if (df[col].isnull().sum() / len(df)) > 0.5: continue

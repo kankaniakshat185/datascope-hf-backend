@@ -42,7 +42,7 @@ def auto_select_k(scaled_data: np.ndarray, max_k: int = 5) -> int:
                 
     return best_k
 
-def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str = 'regression') -> Tuple[Dict[str, Any], list]:
+def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str = None) -> Tuple[Dict[str, Any], list]:
     """
     1. Clusters dataset.
     2. Trains global model.
@@ -58,6 +58,10 @@ def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str 
     
     if len(X) < 20 or len(X.columns) < 2:
         return {}, ["Dataset too small for segmented SHAP analysis."]
+
+    if not problem_type:
+        is_classification = df[target_col].nunique() < 20 or not pd.api.types.is_numeric_dtype(df[target_col])
+        problem_type = 'classification' if is_classification else 'regression'
 
     # Sub-sample if dataset is too large to keep API fast
     if len(X) > 5000:
