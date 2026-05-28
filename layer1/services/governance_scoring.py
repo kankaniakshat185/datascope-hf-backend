@@ -430,17 +430,22 @@ def calculate_governance_score(
     # FINAL STATUS
     # -----------------------------------------------------------------
 
-    if governance_score >= 82 and stability_score >= 74:
-
+    if (
+        governance_score >= 82
+        and stability_score >= 74
+        and not critical_found
+    ):
         final_status = "APPROVED"
 
-    elif governance_score >= 70 and stability_score >= 62:
-
-        final_status = "AWAITING_REVIEW"
+    elif (
+        governance_score < 45
+        or stability_score < 45
+        or worst_leakage_category == "D"
+    ):
+        final_status = "REJECTED"
 
     else:
-
-        final_status = "REJECTED"
+        final_status = "AWAITING_REVIEW"
 
     # -----------------------------------------------------------------
     # CONFIDENCE LABEL
