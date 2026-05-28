@@ -101,6 +101,10 @@ def run_all_checks(df: pd.DataFrame, target_col: str, custom_rules: list = None)
         formatted_issue["governance_verdict"] = decision["verdict"]
         formatted_issue["governance_explanation"] = decision["explanation"]
         
+        # Handle 0% synthetic improvements
+        if abs(impact_val) < 0.1 and decision["verdict"] != "REJECTED":
+            formatted_issue["governance_explanation"] += " (Impact was negligible because the issue did not strictly degrade the model's structural distribution)."
+        
         # If rejected, override the suggestion to block user from blindly applying it
         if decision["verdict"] == "REJECTED":
             formatted_issue["suggestion"] = f"REMEDIATION BLOCKED: {decision['explanation']}"

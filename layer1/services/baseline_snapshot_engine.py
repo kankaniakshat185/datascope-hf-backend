@@ -51,10 +51,20 @@ def compute_baseline_metrics(df: pd.DataFrame, target_col: str) -> Dict[str, Any
         metrics["mae"] = float(-np.mean(cv_results['test_neg_mean_absolute_error']))
         stability_var = np.std(cv_results['test_r2'])
 
-    # Proxy for stability score (0-100), lower variance = higher stability
-    # Max variance in CV is typically 0.5. 
-    stability_score = max(0.0, min(100.0, 100 - (stability_var * 200)))
+    missingness_ratio = float(df.isnull().sum().sum() / (df.shape[0] * df.shape[1]))
+    duplicate_ratio = float(df.duplicated().sum() / df.shape[0])
+    
+    # Base stability purely on predictive variance
+    base_stability = 100 - (stability_var * 200)
+    
+    # Penalize for dataset corruption
+    base_stability -= (missingness_ratio * 150)  # Heavy penalty for missing data
+    base_stability -= (duplicate_ratio * 100)    # Penalty for duplicated rows
+    
+    stability_score = max(0.0, min(100.0, base_stability))
+    
     metrics["stability_score"] = float(stability_score)
-    metrics["missingness_ratio"] = float(df.isnull().sum().sum() / (df.shape[0] * df.shape[1]))
+    metrics["missingness_ratio"] = missingness_ratio
+    metrics["duplicate_ratio"] = duplicate_ratio
     
     return metrics

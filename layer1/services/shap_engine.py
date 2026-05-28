@@ -122,12 +122,23 @@ def compute_segmented_shap(df: pd.DataFrame, target_col: str, problem_type: str 
             
     # 5. Generate Insights
     insights = []
-    if len(set(f for c, f in cluster_top_feats)) > 1:
-        insights.append("Feature importance differs significantly across data segments.")
+    
+    unique_tops = set(f for c, f in cluster_top_feats)
+    if len(unique_tops) > 1:
+        insights.append("Feature importance differs significantly across data segments, indicating complex behavioral patterns.")
     else:
-        insights.append("The top driving feature remains consistent across all data segments.")
+        insights.append("The primary predictive feature remains consistent across all structural data segments.")
         
-    for cluster_name, top_feat in cluster_top_feats:
-        insights.append(f"In {cluster_name}, '{top_feat}' is the most dominant feature.")
+    for cluster_name, data in clusters_results.items():
+        top_feat = data["top_features"][0]
+        importance_pct = data["feature_importance"].get(top_feat, 0)
+        
+        # Only flag actual leakage if a feature controls >80% of the prediction entirely by itself
+        if importance_pct > 0.80:
+            insights.append(f"WARNING: Suspected causal leakage detected in {cluster_name}. Feature '{top_feat}' has overwhelming predictive power ({importance_pct*100:.1f}%), indicating it may be a proxy for the target.")
+        elif importance_pct > 0.50:
+            insights.append(f"In {cluster_name}, '{top_feat}' strongly influences the model ({importance_pct*100:.1f}% importance).")
+        else:
+            insights.append(f"In {cluster_name}, predictive power is distributed evenly, with '{top_feat}' leading slightly.")
 
     return clusters_results, insights

@@ -68,6 +68,8 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         # Note: issues is a dict like {"issues": [...], "total_impact": X}
         actual_issues = issues.get("issues", []) if isinstance(issues, dict) else issues
         governance = calculate_governance_score(
+            df,
+            target_column,
             actual_issues, 
             layer1_data, 
             shap_data,
