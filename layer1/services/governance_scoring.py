@@ -2,7 +2,6 @@ from typing import Dict, Any, List
 import datetime
 from layer1.services.baseline_snapshot_engine import compute_baseline_metrics
 import pandas as pd
-
 def detect_identifier_columns(df):
     """
     Detects synthetic identifiers and row-index-like columns.
@@ -57,59 +56,72 @@ def calculate_governance_score(
     Enterprise-style deterministic governance scoring engine.
 
     Philosophy:
-    - Systems begin suspicious by default
-    - Trust is earned progressively
-    - Deployment approval should be rare
-    - REVIEW state should be common
+    - Clean datasets should usually APPROVE
+    - Moderate imperfections should trigger REVIEW
+    - Only catastrophic issues should REJECT
     """
 
     audit_logs = []
 
     baseline = compute_baseline_metrics(df, target_column) if df is not None else {}
 
-    real_stability = baseline.get("stability_score", 72.0)
+    real_stability = baseline.get("stability_score", 82.0)
     missingness = baseline.get("missingness_ratio", 0)
 
-    # -----------------------------------------------------------------
-    # CONSERVATIVE PRIORS
-    # -----------------------------------------------------------------
+    # =========================================================
+    # BASELINE PRIORS
+    # =========================================================
 
-    governance_score = 62.0
-    stability_score = max(35.0, min(real_stability, 92.0))
+    governance_score = 78.0
+    stability_score = max(45.0, min(real_stability, 94.0))
 
     confidence_score = 100.0
 
     critical_found = False
     shap_leakage = False
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # IDENTIFIER DETECTION
-    # -----------------------------------------------------------------
+    # =========================================================
 
     identifier_columns = detect_identifier_columns(df) if df is not None else []
 
-    if identifier_columns:
+    REAL_IDENTIFIER_COLUMNS = []
 
-        id_penalty = min(5.0, len(identifier_columns) * 1.5)
+    for col in identifier_columns:
 
-        governance_score -= id_penalty
-        stability_score -= id_penalty * 0.5
+        try:
+            uniqueness_ratio = (
+                df[col].nunique(dropna=False) / max(1, len(df))
+            )
 
-        confidence_score -= 4
+            if uniqueness_ratio > 0.98:
+                REAL_IDENTIFIER_COLUMNS.append(col)
+
+        except:
+            continue
+
+    if REAL_IDENTIFIER_COLUMNS:
+
+        governance_score -= min(2.5, len(REAL_IDENTIFIER_COLUMNS) * 0.8)
+
+        stability_score -= min(2.0, len(REAL_IDENTIFIER_COLUMNS) * 0.5)
+
+        confidence_score -= 2
 
         audit_logs.append({
             "phase": "VALIDATION PHASE",
             "rule": "IDENTIFIER_COLUMNS_DETECTED",
-            "severity": "WARNING",
+            "severity": "INFO",
             "message":
-                f"Synthetic identifier-like columns detected: "
-                f"{', '.join(identifier_columns[:5])}. "
-                f"These columns may encode row ordering or non-generalizable structure."
+                f"Identifier-like columns detected: "
+                f"{', '.join(REAL_IDENTIFIER_COLUMNS[:5])}. "
+                f"These columns are recommended for exclusion from training."
         })
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # VALIDATION PHASE
-    # -----------------------------------------------------------------
+    # =========================================================
 
     validation_status = "VALIDATION_PASSED"
 
@@ -118,8 +130,7 @@ def calculate_governance_score(
         "rule": "DATASET_REGISTERED",
         "severity": "INFO",
         "message":
-            f"Dataset v1 registered. "
-            f"Initializing validation sequence for {rows_processed} rows."
+            f"Dataset registered with {rows_processed} rows."
     })
 
     audit_logs.append({
@@ -127,41 +138,45 @@ def calculate_governance_score(
         "rule": "VALIDATION_STARTED",
         "severity": "INFO",
         "message":
-            f"ML Validation engines triggered. "
-            f"Scanning {features_evaluated} features."
+            f"Validation engines scanning {features_evaluated} features."
     })
 
-    # -----------------------------------------------------------------
-    # POSITIVE STRUCTURAL REWARDS
-    # -----------------------------------------------------------------
+    # =========================================================
+    # POSITIVE STRUCTURAL SIGNALS
+    # =========================================================
 
     if missingness < 0.01:
-        governance_score += 8.0
+
+        governance_score += 6.0
         stability_score += 4.0
 
     elif missingness < 0.05:
-        governance_score += 4.0
+
+        governance_score += 3.0
         stability_score += 2.0
 
     if rows_processed > 1000:
+
         governance_score += 3.0
 
     elif rows_processed > 300:
-        governance_score += 1.5
 
-    if features_evaluated >= 5:
         governance_score += 2.0
 
-    # -----------------------------------------------------------------
+    if features_evaluated >= 5:
+
+        governance_score += 2.0
+
+    # =========================================================
     # MISSINGNESS PENALTIES
-    # -----------------------------------------------------------------
+    # =========================================================
 
-    if missingness > 0.05:
+    if missingness > 0.10:
 
-        governance_score -= (missingness * 85)
-        stability_score -= (missingness * 90)
+        governance_score -= (missingness * 40)
+        stability_score -= (missingness * 45)
 
-        confidence_score -= missingness * 100
+        confidence_score -= missingness * 60
 
         validation_status = "VALIDATION_WARNING"
 
@@ -170,13 +185,17 @@ def calculate_governance_score(
             "rule": "HIGH_MISSINGNESS",
             "severity": "WARNING",
             "message":
-                f"Dataset contains {missingness*100:.1f}% missing values. "
-                f"Imputation may introduce instability and probabilistic drift."
+                f"Dataset contains {missingness*100:.1f}% missing values."
         })
 
-    # -----------------------------------------------------------------
+    elif missingness > 0.05:
+
+        governance_score -= (missingness * 20)
+        stability_score -= (missingness * 25)
+
+    # =========================================================
     # ML ISSUE PENALTIES
-    # -----------------------------------------------------------------
+    # =========================================================
 
     for issue in ml_issues:
 
@@ -188,7 +207,8 @@ def calculate_governance_score(
             critical_found = True
 
             governance_score -= 20.0
-            stability_score -= 15.0
+            stability_score -= 16.0
+
             confidence_score -= 25
 
             validation_status = "VALIDATION_FAILED"
@@ -203,9 +223,10 @@ def calculate_governance_score(
 
         elif severity == "HIGH":
 
-            governance_score -= 10.0
-            stability_score -= 6.0
-            confidence_score -= 12
+            governance_score -= 6.0
+            stability_score -= 4.0
+
+            confidence_score -= 8
 
             validation_status = (
                 "VALIDATION_WARNING"
@@ -223,41 +244,31 @@ def calculate_governance_score(
 
         elif severity == "MEDIUM":
 
-            governance_score -= 4.0
-            stability_score -= 2.0
-            confidence_score -= 5
+            governance_score -= 1.5
+            stability_score -= 1.0
 
-    # -----------------------------------------------------------------
+            confidence_score -= 2
+
+    # =========================================================
     # VALIDATION COMPLETION
-    # -----------------------------------------------------------------
+    # =========================================================
 
     if validation_status == "VALIDATION_PASSED":
 
-        governance_score += 6.0
-        stability_score += 3.0
+        governance_score += 4.0
+        stability_score += 2.0
 
         audit_logs.append({
             "phase": "VALIDATION PHASE",
             "rule": "VALIDATION_PASSED",
             "severity": "SUCCESS",
             "message":
-                "Dataset passed foundational structural integrity checks."
+                "Dataset passed foundational structural validation."
         })
 
-    elif validation_status == "VALIDATION_FAILED":
-
-        audit_logs.append({
-            "phase": "VALIDATION PHASE",
-            "rule": "VALIDATION_FAILED",
-            "severity": "CRITICAL",
-            "message":
-                "Structural integrity failure detected. "
-                "Execution confidence severely degraded."
-        })
-
-    # -----------------------------------------------------------------
+    # =========================================================
     # ANALYSIS PHASE
-    # -----------------------------------------------------------------
+    # =========================================================
 
     audit_logs.append({
         "phase": "ANALYSIS PHASE",
@@ -277,94 +288,88 @@ def calculate_governance_score(
             .get("percentage_flagged", 0)
         )
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # OUTLIER PENALTIES
-    # -----------------------------------------------------------------
+    # =========================================================
 
-    if outlier_pct > 10.0:
+    if outlier_pct > 15.0:
 
-        governance_score -= (outlier_pct * 1.5)
-        stability_score -= (outlier_pct * 2.4)
+        governance_score -= (outlier_pct * 1.0)
+        stability_score -= (outlier_pct * 1.5)
 
-        confidence_score -= 18
+        confidence_score -= 14
 
         audit_logs.append({
             "phase": "ANALYSIS PHASE",
             "rule": "SEVERE_OUTLIER_CONTAMINATION",
             "severity": "CRITICAL",
             "message":
-                f"Outlier consensus engines flagged "
-                f"{outlier_pct:.1f}% anomalous rows. "
-                f"Production stability severely compromised."
+                f"{outlier_pct:.1f}% anomalous rows detected."
         })
 
-    elif outlier_pct > 2.0:
+    elif outlier_pct > 5.0:
 
-        governance_score -= (outlier_pct * 0.7)
-        stability_score -= (outlier_pct * 1.8)
+        governance_score -= (outlier_pct * 0.35)
+        stability_score -= (outlier_pct * 0.7)
 
-        confidence_score -= 8
+        confidence_score -= 4
 
         audit_logs.append({
             "phase": "ANALYSIS PHASE",
             "rule": "MODERATE_OUTLIER_CONTAMINATION",
             "severity": "WARNING",
             "message":
-                f"Adaptive anomaly consensus observed "
-                f"{outlier_pct:.1f}% deviation."
+                f"Moderate anomaly contamination observed "
+                f"({outlier_pct:.1f}%)."
         })
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # LEAKAGE ARBITRATION
-    # -----------------------------------------------------------------
+    # =========================================================
 
     if worst_leakage_category:
 
         if worst_leakage_category == "A":
 
-            governance_score -= 2.0
+            governance_score -= 1.0
 
             audit_logs.append({
                 "phase": "ANALYSIS PHASE",
                 "rule": "FEATURE_REDUNDANCY_OBSERVED",
                 "severity": "INFO",
                 "message":
-                    "Strong predictive feature redundancy detected. "
-                    "No actionable leakage consensus reached."
+                    "Feature redundancy detected without leakage consensus."
             })
 
         elif worst_leakage_category == "B":
 
-            governance_score -= 10.0
-            stability_score -= 8.0
+            governance_score -= 6.0
+            stability_score -= 4.0
 
-            confidence_score -= 12
+            confidence_score -= 6
 
             audit_logs.append({
                 "phase": "ANALYSIS PHASE",
                 "rule": "PROXY_BEHAVIOR_DETECTED",
                 "severity": "WARNING",
                 "message":
-                    "Indirect proxy-like predictive behavior observed. "
-                    "Further causal review recommended."
+                    "Proxy-like predictive behavior observed."
             })
 
         elif worst_leakage_category == "C":
 
             shap_leakage = True
 
-            governance_score -= 12.0
-            stability_score -= 8.0
+            governance_score -= 14.0
+            stability_score -= 10.0
 
-            confidence_score -= 12
+            confidence_score -= 14
 
             audit_logs.append({
                 "phase": "ANALYSIS PHASE",
                 "rule": "SUSPICIOUS_LEAKAGE_PATTERN",
                 "severity": "HIGH",
                 "message":
-                    "High permutation impact combined with "
-                    "moderate ablation degradation. "
                     "Potential target leakage suspected."
             })
 
@@ -373,19 +378,17 @@ def calculate_governance_score(
             shap_leakage = True
             critical_found = True
 
-            governance_score -= 42.0
-            stability_score -= 34.0
+            governance_score -= 40.0
+            stability_score -= 32.0
 
-            confidence_score -= 45
+            confidence_score -= 40
 
             audit_logs.append({
                 "phase": "ANALYSIS PHASE",
                 "rule": "CAUSAL_LEAKAGE_CONFIRMED",
                 "severity": "CRITICAL",
                 "message":
-                    "Confirmed causal leakage detected. "
-                    "Feature dependency catastrophically compromises "
-                    "generalization integrity."
+                    "Confirmed causal leakage detected."
             })
 
     else:
@@ -397,72 +400,79 @@ def calculate_governance_score(
             "rule": "LEAKAGE_VALIDATION_PASSED",
             "severity": "SUCCESS",
             "message":
-                "No actionable leakage or proxy consensus detected."
+                "No actionable leakage consensus detected."
         })
 
-    # -----------------------------------------------------------------
-    # CALIBRATION
-    # -----------------------------------------------------------------
+    # =========================================================
+    # FINAL CALIBRATION
+    # =========================================================
 
-    governance_score = round(max(3.0, min(96.0, governance_score)), 1)
+    governance_score = round(max(5.0, min(98.0, governance_score)), 1)
 
-    stability_score = round(max(2.0, min(92.0, stability_score)), 1)
+    stability_score = round(max(5.0, min(95.0, stability_score)), 1)
 
     confidence_score = round(max(5.0, min(99.0, confidence_score)), 1)
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # DEPLOYMENT GATING
-    # -----------------------------------------------------------------
+    # =========================================================
 
     deployment_ready = (
-    governance_score >= 88.0
-    and stability_score >= 82.0
-    and not critical_found
-)
-
-    retraining_required = (
-        stability_score < 68.0
-        or shap_leakage
-        or outlier_pct > 10.0
+        governance_score >= 80.0
+        and stability_score >= 72.0
+        and not critical_found
+        and worst_leakage_category != "D"
     )
 
-    # -----------------------------------------------------------------
+    retraining_required = (
+        stability_score < 60.0
+        or shap_leakage
+        or outlier_pct > 15.0
+    )
+
+    # =========================================================
     # FINAL STATUS
-    # -----------------------------------------------------------------
+    # =========================================================
 
     if (
-        governance_score >= 82
-        and stability_score >= 74
+        governance_score >= 80
+        and stability_score >= 72
         and not critical_found
     ):
+
         final_status = "APPROVED"
 
     elif (
         governance_score < 45
-        or stability_score < 45
+        or stability_score < 40
         or worst_leakage_category == "D"
     ):
+
         final_status = "REJECTED"
 
     else:
+
         final_status = "AWAITING_REVIEW"
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # CONFIDENCE LABEL
-    # -----------------------------------------------------------------
+    # =========================================================
 
     if confidence_score >= 85:
+
         confidence_label = "HIGH"
 
     elif confidence_score >= 60:
+
         confidence_label = "MODERATE"
 
     else:
+
         confidence_label = "LOW"
 
-    # -----------------------------------------------------------------
+    # =========================================================
     # GOVERNANCE EVENTS
-    # -----------------------------------------------------------------
+    # =========================================================
 
     if final_status == "APPROVED":
 
@@ -473,11 +483,9 @@ def calculate_governance_score(
             "message":
                 (
                     "**Governance Approved**\n\n"
-                    "**Why it was approved:**\n"
                     "- Structural integrity remained stable.\n"
-                    "- No catastrophic leakage consensus observed.\n"
-                    "- Outlier contamination stayed within acceptable bounds.\n"
-                    "- Deployment stability exceeded enterprise threshold.\n\n"
+                    "- No catastrophic leakage detected.\n"
+                    "- Stability exceeded deployment threshold.\n\n"
                     f"**Confidence level:** {confidence_label}."
                 )
         })
@@ -491,18 +499,9 @@ def calculate_governance_score(
             "message":
                 (
                     "**Manual Governance Review Required**\n\n"
-                    f"**Governance Score:** {governance_score}/100\n"
-                    f"**Stability Score:** {stability_score}/100\n\n"
-                    "**What happened:**\n"
-                    "The engine detected moderate structural concerns "
-                    "that require human arbitration before deployment.\n\n"
-                    "**Why it matters:**\n"
-                    "The model may generalize inconsistently under "
-                    "production distribution shifts.\n\n"
-                    "**Recommended action:**\n"
-                    "Review highlighted warnings and validate feature "
-                    "availability assumptions.\n\n"
-                    f"**Confidence level:** {confidence_label}."
+                    f"Governance Score: {governance_score}/100\n"
+                    f"Stability Score: {stability_score}/100\n\n"
+                    "Moderate structural concerns require human review."
                 )
         })
 
@@ -515,24 +514,11 @@ def calculate_governance_score(
             "message":
                 (
                     "**Deployment Blocked**\n\n"
-                    f"**Governance Score:** {governance_score}/100\n"
-                    f"**Stability Score:** {stability_score}/100\n\n"
-                    "**What happened:**\n"
-                    "The governance engine rejected deployment due to "
-                    "high structural risk.\n\n"
-                    "**Why it matters:**\n"
-                    "The model exhibits behavior inconsistent with "
-                    "robust real-world generalization.\n\n"
-                    "**Recommended action:**\n"
-                    "Remove leaking features, clean anomalous rows, "
-                    "and retrain the baseline model.\n\n"
-                    f"**Confidence level:** {confidence_label}."
+                    f"Governance Score: {governance_score}/100\n"
+                    f"Stability Score: {stability_score}/100\n\n"
+                    "Critical structural risk detected."
                 )
         })
-
-    # -----------------------------------------------------------------
-    # RETRAINING EVENT
-    # -----------------------------------------------------------------
 
     if retraining_required:
 
@@ -543,21 +529,9 @@ def calculate_governance_score(
             "message":
                 (
                     "**Retraining Recommended**\n\n"
-                    "**What happened:**\n"
-                    "The engine detected instability patterns "
-                    "that weaken production reliability.\n\n"
-                    "**Why it matters:**\n"
-                    "The current feature space may not generalize "
-                    "robustly under future inference conditions.\n\n"
-                    "**Recommended action:**\n"
-                    "Apply the suggested remediations and retrain "
-                    "the baseline model."
+                    "Instability patterns weaken production reliability."
                 )
         })
-
-    # -----------------------------------------------------------------
-    # RETURN
-    # -----------------------------------------------------------------
 
     print("Worst leakage category:", worst_leakage_category)
     print("Governance:", governance_score)
@@ -584,8 +558,8 @@ def calculate_governance_score(
                 if shap_leakage
                 else (
                     f"Elevated outlier contamination ({outlier_pct:.1f}%)."
-                    if outlier_pct > 5.0
-                    else "Cumulative structural degradation observed."
+                    if outlier_pct > 10.0
+                    else "Minor structural observations detected."
                 )
             ),
 
@@ -598,7 +572,7 @@ def calculate_governance_score(
 
             "model_type": "RandomForestRegressor",
 
-            "pipeline_version": "pipeline_v3",
+            "pipeline_version": "pipeline_v4",
 
             "monitoring_status": "ACTIVE",
 
@@ -614,7 +588,7 @@ def calculate_governance_score(
 
             "validation_status": validation_status,
 
-            "identifier_columns_detected": identifier_columns,
+            "identifier_columns_detected": REAL_IDENTIFIER_COLUMNS,
 
             "outlier_percentage": outlier_pct,
 
