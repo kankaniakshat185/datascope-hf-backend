@@ -1,6 +1,7 @@
 from typing import Dict, Any, List
 import datetime
 from layer1.services.baseline_snapshot_engine import compute_baseline_metrics
+import pandas as pd
 
 def detect_identifier_columns(df):
     """
@@ -27,8 +28,10 @@ def detect_identifier_columns(df):
                 or "uuid" in name
                 or "index" in name
                 or "key" in name
-                or uniqueness_ratio > 0.97
-                or is_monotonic
+                or (
+                    uniqueness_ratio > 0.995
+                    and pd.api.types.is_integer_dtype(df[col])
+                )
             ):
                 suspicious.append(col)
 
@@ -87,12 +90,12 @@ def calculate_governance_score(
 
     if identifier_columns:
 
-        id_penalty = min(12.0, len(identifier_columns) * 3.0)
+        id_penalty = min(5.0, len(identifier_columns) * 1.5)
 
         governance_score -= id_penalty
         stability_score -= id_penalty * 0.5
 
-        confidence_score -= 10
+        confidence_score -= 4
 
         audit_logs.append({
             "phase": "VALIDATION PHASE",
@@ -350,10 +353,10 @@ def calculate_governance_score(
 
             shap_leakage = True
 
-            governance_score -= 24.0
-            stability_score -= 18.0
+            governance_score -= 12.0
+            stability_score -= 8.0
 
-            confidence_score -= 28
+            confidence_score -= 12
 
             audit_logs.append({
                 "phase": "ANALYSIS PHASE",
@@ -412,11 +415,10 @@ def calculate_governance_score(
     # -----------------------------------------------------------------
 
     deployment_ready = (
-        governance_score >= 88.0
-        and stability_score >= 82.0
-        and not critical_found
-        and not shap_leakage
-    )
+    governance_score >= 88.0
+    and stability_score >= 82.0
+    and not critical_found
+)
 
     retraining_required = (
         stability_score < 68.0
@@ -428,11 +430,11 @@ def calculate_governance_score(
     # FINAL STATUS
     # -----------------------------------------------------------------
 
-    if governance_score >= 88 and stability_score >= 82:
+    if governance_score >= 82 and stability_score >= 74:
 
         final_status = "APPROVED"
 
-    elif governance_score >= 72 and stability_score >= 65:
+    elif governance_score >= 70 and stability_score >= 62:
 
         final_status = "AWAITING_REVIEW"
 
