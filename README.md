@@ -45,17 +45,23 @@ pip install datascope-ml
 Generate your personal **SDK Key** securely from your DataScope web vault, and authenticate your local scripts:
 
 ```python
-import datascope
 import pandas as pd
+import datascope
 
-# 1. Initialize the SDK with your API Key
-client = datascope.Client(api_key="ds_your_generated_sdk_key_here")
+# Load your local dataset
+df = pd.read_csv("my_training_data.csv")
 
-# 2. Load your data
-df = pd.read_csv("my_dataset.csv")
+# Initialize the DataScope client
+client = datascope.Client(api_key="YOUR_API_KEY")
 
-# 3. Analyze it!
-client.analyze(df, project_name="Churn_Model_V2")
+# Upload and generate analysis
+# This automatically opens your browser to the results dashboard!
+client.analyze(
+    df, 
+    project_name="fraud_detection_v2", 
+    target_column="is_fraud",
+    prediction_type="classification"
+)
 ```
 
 **What happens next?** 
