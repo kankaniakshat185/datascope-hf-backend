@@ -2,6 +2,7 @@ from fastapi import BackgroundTasks
 import uuid
 import time
 from typing import Dict, Any
+import pandas as pd
 
 # In-memory store for async jobs.
 # In a true massive-scale production system, this would be Redis.
