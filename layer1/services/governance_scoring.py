@@ -559,6 +559,11 @@ def calculate_governance_score(
     # RETURN
     # -----------------------------------------------------------------
 
+    print("Worst leakage category:", worst_leakage_category)
+    print("Governance:", governance_score)
+    print("Stability:", stability_score)
+    print("Final status:", final_status)
+
     return {
 
         "recommended_status": final_status,
