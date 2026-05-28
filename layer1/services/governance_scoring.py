@@ -10,7 +10,8 @@ def calculate_governance_score(
     shap_data: Dict[str, Any],
     runtime_ms: int = 1500,
     rows_processed: int = 0,
-    features_evaluated: int = 0
+    features_evaluated: int = 0,
+    worst_leakage_category: str = None
 ) -> Dict[str, Any]:
     """
     Deterministic Governance Scoring and Event Engine.
@@ -133,23 +134,50 @@ def calculate_governance_score(
         })
 
     shap_leakage = False
-    leakage_insight = ""
-    if shap_data and not shap_data.get("error"):
-        insights = shap_data.get("insights", [])
-        for insight in insights:
-            if "suspected causal leakage" in str(insight).lower():
-                shap_leakage = True
-                leakage_insight = insight
-                governance_score -= 22.5
-                stability_score -= 18.4
-                audit_logs.append({
-                    "phase": "ANALYSIS PHASE",
-                    "rule": "CAUSAL_LEAKAGE_DETECTED",
-                    "severity": "CRITICAL",
-                    "message": f"Causal leakage validated across permutation and ablation engines. {insight}"
-                })
-                
-    if not shap_leakage:
+    
+    if worst_leakage_category:
+        if worst_leakage_category == "A":
+            # Strong Predictive Feature - No meaningful governance penalty
+            governance_score -= 1.5
+            audit_logs.append({
+                "phase": "ANALYSIS PHASE",
+                "rule": "REDUNDANT_FEATURE_OBSERVED",
+                "severity": "INFO",
+                "message": "Strong predictive feature identified, but model maintains resilience after ablation. Interpreted as feature redundancy."
+            })
+        elif worst_leakage_category == "B":
+            # Proxy-like Behavior - Moderate penalty
+            governance_score -= 12.0
+            stability_score -= 8.5
+            audit_logs.append({
+                "phase": "ANALYSIS PHASE",
+                "rule": "PROXY_BEHAVIOR_DETECTED",
+                "severity": "WARNING",
+                "message": "Proxy-like predictive behavior observed. Further validation recommended to rule out indirect target encoding."
+            })
+        elif worst_leakage_category == "C":
+            # Suspicious Leakage - High penalty
+            shap_leakage = True
+            governance_score -= 25.0
+            stability_score -= 18.0
+            audit_logs.append({
+                "phase": "ANALYSIS PHASE",
+                "rule": "SUSPICIOUS_LEAKAGE",
+                "severity": "HIGH",
+                "message": "Suspicious leakage pattern detected (high permutation + moderate ablation). Conditional deployment restriction applied."
+            })
+        elif worst_leakage_category == "D":
+            # Confirmed Leakage - Critical penalty
+            shap_leakage = True
+            governance_score -= 45.0  # Massive penalty to block deployment entirely
+            stability_score -= 35.0
+            audit_logs.append({
+                "phase": "ANALYSIS PHASE",
+                "rule": "CAUSAL_LEAKAGE_CONFIRMED",
+                "severity": "CRITICAL",
+                "message": "Confirmed causal leakage. Feature ablation catastrophically degrades model stability. Deployment blocked."
+            })
+    else:
         audit_logs.append({
             "phase": "ANALYSIS PHASE",
             "rule": "LEAKAGE_VALIDATION_PASSED",

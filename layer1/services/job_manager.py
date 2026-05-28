@@ -93,7 +93,8 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
             shap_data,
             runtime_ms=int((time.time() - start_time) * 1000),
             rows_processed=len(df),
-            features_evaluated=len(df.columns)
+            features_evaluated=len(df.columns),
+            worst_leakage_category=arbitration_result.get("worst_leakage_category")
         )
 
         result = {

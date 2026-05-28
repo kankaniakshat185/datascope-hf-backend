@@ -23,6 +23,7 @@ def arbitrate_governance_signals(
     has_leakage = False
     leakage_explanation = ""
     leakage_confidence = 0
+    worst_leakage_category = None
     
     # Collect all potential leakage signals
     raw_leakage_issues = [i for i in ml_issues if i.get("type") == "data_leakage"]
@@ -36,37 +37,72 @@ def arbitrate_governance_signals(
             importance = feat_metrics.get("importance_score", 0)
             ablation = feat_metrics.get("performance_impact", 0)
             
-            # CONTRADICTION RULE: High permutation, low ablation = Redundancy
-            if importance > 0.4 and ablation < 0.05:
-                suppressed_signals.append({
-                    "type": "feature_redundancy",
-                    "column": col,
-                    "reason": f"Permutation importance is high but ablation drop is near zero ({ablation:.4f}). Interpreting as distributed feature redundancy, NOT leakage."
-                })
-                # Downgrade issue
-                leaky_issue["severity"] = "LOW"
-                leaky_issue["description"] = f"Observation: '{col}' is a strong but non-critical predictor. Its ablation impact is low ({ablation:.4f}) due to ensemble redundancy."
-                leaky_issue["suggestion"] = "No immediate action required. Feature substitution prevents leakage collapse."
-                leaky_issue["type"] = "feature_redundancy"
-                arbitrated_issues.append(leaky_issue)
-                continue
+            # Baseline leakage confidence (start with permutation)
+            base_confidence = min(100, importance * 150)
             
-            # CONFIRMATION RULE: High importance AND high ablation
-            if importance > 0.6 and ablation > 0.2:
-                has_leakage = True
-                leakage_confidence = 95
-                leakage_explanation = f"Confirmed Proxy Target: '{col}' causes catastrophic collapse when ablated ({ablation*100:.1f}% drop)."
-                leaky_issue["severity"] = "CRITICAL"
-                leaky_issue["description"] = leakage_explanation
+            # Subtractive Calibration: Low ablation subtracts confidence
+            if ablation < 0.05:
+                leakage_confidence = base_confidence * 0.35  # Severe contradiction penalty
+                category = "A"
+            elif ablation < 0.15:
+                leakage_confidence = base_confidence * 0.70
+                category = "B"
+            elif ablation < 0.30:
+                leakage_confidence = base_confidence * 0.90
+                category = "C"
+            else:
+                leakage_confidence = base_confidence
+                category = "D"
+                
+            # ARBITRATION CATEGORIES
+            if category == "A":
+                # CATEGORY A: Strong Predictive Feature
+                leaky_issue["severity"] = "LOW"
+                leaky_issue["description"] = f"Feature contributes strongly to predictions (importance: {importance:.2f}) but model retains resilience after feature removal (ablation drop: {ablation*100:.1f}%)."
+                leaky_issue["suggestion"] = "No immediate action required. Predictive strength stems from redundant structure, not direct proxy leakage."
+                leaky_issue["type"] = "feature_redundancy"
                 leaky_issue["confidence"] = leakage_confidence
                 arbitrated_issues.append(leaky_issue)
-                continue
+                if worst_leakage_category not in ["B", "C", "D"]: worst_leakage_category = "A"
                 
-        # If no impact data to verify, downgrade pure correlation to observation
-        leaky_issue["severity"] = "LOW"
-        leaky_issue["description"] = f"Observation: '{col}' is highly correlated with the target. Weak leakage confidence without causal proof."
-        leaky_issue["suggestion"] = "Monitor. Strong predictors require ablation testing before governance escalation."
-        arbitrated_issues.append(leaky_issue)
+            elif category == "B":
+                # CATEGORY B: Proxy-like Behavior
+                leaky_issue["severity"] = "MEDIUM"
+                leaky_issue["description"] = f"Feature exhibits proxy-like predictive behavior (ablation drop: {ablation*100:.1f}%)."
+                leaky_issue["suggestion"] = "Further validation recommended before deployment to rule out target encoding."
+                leaky_issue["type"] = "proxy_behavior"
+                leaky_issue["confidence"] = leakage_confidence
+                arbitrated_issues.append(leaky_issue)
+                if worst_leakage_category not in ["C", "D"]: worst_leakage_category = "B"
+                
+            elif category == "C":
+                # CATEGORY C: Suspicious Leakage
+                has_leakage = True
+                leakage_explanation = f"Potential proxy-like behavior observed. Cross-engine agreement exists, but moderate ablation sensitivity ({ablation*100:.1f}%) suggests distributed feature redundancy rather than direct causal leakage."
+                leaky_issue["severity"] = "HIGH"
+                leaky_issue["description"] = f"Suspicious leakage pattern detected. High ablation impact ({ablation*100:.1f}%) and permutation dominance."
+                leaky_issue["suggestion"] = "Conditional deployment restriction. Investigate data generation timeline."
+                leaky_issue["confidence"] = leakage_confidence
+                arbitrated_issues.append(leaky_issue)
+                if worst_leakage_category not in ["D"]: worst_leakage_category = "C"
+                
+            else:
+                # CATEGORY D: Confirmed Leakage
+                has_leakage = True
+                leakage_explanation = f"Confirmed causal leakage. Feature ablation severely degrades the model ({ablation*100:.1f}% drop)."
+                leaky_issue["severity"] = "CRITICAL"
+                leaky_issue["description"] = leakage_explanation
+                leaky_issue["suggestion"] = "Deployment blocked. Remove feature and retrain."
+                leaky_issue["confidence"] = leakage_confidence
+                arbitrated_issues.append(leaky_issue)
+                worst_leakage_category = "D"
+                
+        else:
+            # If no impact data to verify, downgrade pure correlation to observation
+            leaky_issue["severity"] = "LOW"
+            leaky_issue["description"] = f"Observation: '{col}' is highly correlated with the target. Weak leakage confidence without causal proof."
+            leaky_issue["suggestion"] = "Monitor. Strong predictors require ablation testing before governance escalation."
+            arbitrated_issues.append(leaky_issue)
         
     # -------------------------------------------------------------
     # 2. Correlation Arbitration
@@ -102,5 +138,6 @@ def arbitrate_governance_signals(
         "suppressed_signals": suppressed_signals,
         "has_leakage": has_leakage,
         "leakage_explanation": leakage_explanation,
-        "leakage_confidence": leakage_confidence
+        "leakage_confidence": leakage_confidence,
+        "worst_leakage_category": worst_leakage_category
     }
