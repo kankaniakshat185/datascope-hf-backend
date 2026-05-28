@@ -196,7 +196,9 @@ def run_layer1_full(df: pd.DataFrame, target_column: str) -> dict:
     
     # 2. Causal-Aware Impact Analysis
     try:
-        impact_features, impact_insights = compute_causal_impact(df, target_column, problem_type='regression')
+        is_classification = df[target_column].nunique() < 20 or not pd.api.types.is_numeric_dtype(df[target_column])
+        problem_type = 'classification' if is_classification else 'regression'
+        impact_features, impact_insights = compute_causal_impact(df, target_column, problem_type=problem_type)
         impact_response = {
             "features": impact_features,
             "insights": impact_insights

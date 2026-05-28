@@ -65,7 +65,9 @@ async def run_full_analysis(
         }
         
         # 2. Causal-Aware Impact Analysis
-        impact_features, impact_insights = compute_causal_impact(df, target_column, problem_type='regression')
+        is_classification = df[target_column].nunique() < 20 or not pd.api.types.is_numeric_dtype(df[target_column])
+        problem_type = 'classification' if is_classification else 'regression'
+        impact_features, impact_insights = compute_causal_impact(df, target_column, problem_type=problem_type)
         impact_response = {
             "features": impact_features,
             "insights": impact_insights
