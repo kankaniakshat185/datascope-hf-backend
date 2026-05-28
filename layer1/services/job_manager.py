@@ -34,6 +34,7 @@ def get_job(job_id: str) -> Dict[str, Any]:
     return jobs_store.get(job_id, {"error": "Job not found", "status": "FAILED"})
 
 from layer1.services.governance_scoring import calculate_governance_score
+from layer1.services.meta_governance_arbitrator import arbitrate_governance_signals
 
 def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_func, eda_func, shap_func, layer1_func):
     """
@@ -60,17 +61,34 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         else:
             shap_data = {"error": "Invalid SHAP response"}
 
-        
         update_job(job_id, "PROCESSING", 90, "Finalizing Consensus Governance Metrics...")
         layer1_data = layer1_func(df, target_column)
         
         update_job(job_id, "PROCESSING", 95, "Running Deterministic Governance Rules...")
         # Note: issues is a dict like {"issues": [...], "total_impact": X}
         actual_issues = issues.get("issues", []) if isinstance(issues, dict) else issues
+        
+        # 1. META-GOVERNANCE ARBITRATION
+        outlier_pct = 0.0
+        if layer1_data and "outlier_analysis" in layer1_data:
+            outlier_pct = layer1_data["outlier_analysis"].get("summary", {}).get("percentage_flagged", 0)
+            
+        impact_data = layer1_data.get("feature_importance", {}).get("features", {}) if layer1_data else {}
+        
+        arbitration_result = arbitrate_governance_signals(
+            ml_issues=actual_issues,
+            outlier_pct=outlier_pct,
+            shap_insights=shap_data.get("insights", []),
+            impact_data=impact_data
+        )
+        
+        final_arbitrated_issues = arbitration_result["arbitrated_issues"]
+        
+        # 2. PROBABILISTIC GOVERNANCE SCORING
         governance = calculate_governance_score(
             df,
             target_column,
-            actual_issues, 
+            final_arbitrated_issues, 
             layer1_data, 
             shap_data,
             runtime_ms=int((time.time() - start_time) * 1000),
@@ -79,7 +97,7 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         )
 
         result = {
-            "issues": issues,
+            "issues": {"issues": final_arbitrated_issues},
             "dictData": dict_data,
             "edaData": eda_data,
             "shapData": shap_data,
