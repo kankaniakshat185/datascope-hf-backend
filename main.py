@@ -189,12 +189,28 @@ def run_layer1_full(df: pd.DataFrame, target_column: str) -> dict:
     }
 
 @app.post("/analyze_async")
-async def analyze_dataset_async(background_tasks: BackgroundTasks, file: UploadFile = File(...), target_column: str = Form(...)):
+async def analyze_dataset_async(
+    background_tasks: BackgroundTasks, 
+    file: UploadFile = File(...), 
+    target_column: str = Form(...),
+    prediction_type: str = Form("Auto Detect"),
+    excluded_columns: str = Form("[]")
+):
     """
     DataScope V2 Governance Endpoint
     Instantly returns a job_id and processes the ML validation in the background.
     """
     df = await parse_uploaded_file(file)
+    
+    # Process exclusions
+    import json
+    try:
+        exclusions = json.loads(excluded_columns)
+        if exclusions:
+            df = df.drop(columns=[col for col in exclusions if col in df.columns], errors='ignore')
+    except Exception:
+        pass
+        
     if not target_column or target_column not in df.columns:
         raise HTTPException(status_code=400, detail="A valid target column must be explicitly selected.")
         
