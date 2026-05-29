@@ -32,15 +32,13 @@ def detect_identifier_columns(df):
             except:
                 pass
 
+            import re
+            is_id_pattern = bool(re.search(r'(^id$|_id$|^id_|_id_|^uuid$|^guid$|^record_id$|^customer_id$|^transaction_id$)', name))
+            
             if (
-                "id" in name
-                or "uuid" in name
-                or "index" in name
-                or "key" in name
-                or (
-                    uniqueness_ratio > 0.995
-                    and pd.api.types.is_integer_dtype(df[col])
-                )
+                is_id_pattern
+                or (uniqueness_ratio > 0.995 and pd.api.types.is_integer_dtype(df[col]))
+                or (uniqueness_ratio > 0.995 and pd.api.types.is_string_dtype(df[col]) and df[col].str.len().mean() > 15)
             ):
                 suspicious.append(col)
 
@@ -85,14 +83,7 @@ def detect_feature_leakage(
             if len(X) < 30:
                 continue
 
-            # SIGNAL 1 — IDENTIFIER DETECTION
-            unique_ratio = X.nunique() / max(1, len(X))
-            is_identifier = (
-                unique_ratio > 0.97
-                or feature.lower().endswith("id")
-                or feature.lower().startswith("id")
-                or "uuid" in feature.lower()
-            )
+            # SIGNAL 1 - REMOVED (Identifiers are now filtered out beforehand)
 
             # SIGNAL 2 — TARGET CORRELATION
             corr_signal = 0.0
@@ -193,9 +184,6 @@ def detect_feature_leakage(
             elif predictive_signal > 0.90:
                 raw_leakage_score += 15
                 
-            if is_identifier:
-                raw_leakage_score += 50
-                
             raw_leakage_score += min(mi_signal * 10, 20)
 
             # NORMALIZE CONFIDENCE SCORE (SIGMOID)
@@ -203,7 +191,7 @@ def detect_feature_leakage(
             display_confidence = round(100 / (1 + math.exp(-0.06 * (raw_leakage_score - 30))), 1)
 
             # FINAL CLASSIFICATION HIERARCHY
-            if is_target_copy or (is_identifier and predictive_signal > 0.8) or raw_leakage_score >= 85:
+            if is_target_copy or raw_leakage_score >= 85:
                 category = "CONFIRMED_LEAKAGE"
             elif raw_leakage_score >= 60 and not is_strong_predictor:
                 category = "HIGH_RISK_PROXY"
@@ -231,7 +219,6 @@ def detect_feature_leakage(
                 "leakage_score": display_confidence,
                 "raw_score": round(raw_leakage_score, 2),
                 "signals": {
-                    "identifier": bool(is_identifier),
                     "correlation": round(float(corr_signal), 4),
                     "mutual_information": round(float(mi_signal), 4),
                     "single_feature_predictive_power": round(float(predictive_signal), 4),
@@ -260,7 +247,8 @@ def calculate_governance_score(
     rows_processed: int = 0,
     features_evaluated: int = 0,
     worst_leakage_category: str = None,
-    leakage_analysis: Dict[str, Any] = None
+    leakage_analysis: Dict[str, Any] = None,
+    identifier_columns: List[str] = None
 ) -> Dict[str, Any]:
 
     """
@@ -295,41 +283,21 @@ def calculate_governance_score(
     # IDENTIFIER DETECTION
     # =========================================================
 
-    identifier_columns = detect_identifier_columns(df) if df is not None else []
-
-    REAL_IDENTIFIER_COLUMNS = []
-
+    if identifier_columns is None:
+        identifier_columns = []
+        
     for col in identifier_columns:
-
-        try:
-            uniqueness_ratio = (
-                df[col].nunique(dropna=False) / max(1, len(df))
-            )
-
-            if uniqueness_ratio > 0.98:
-                REAL_IDENTIFIER_COLUMNS.append(col)
-
-        except:
-            continue
-
-    if REAL_IDENTIFIER_COLUMNS:
-
-        governance_score -= min(2.5, len(REAL_IDENTIFIER_COLUMNS) * 0.8)
-
-        stability_score -= min(2.0, len(REAL_IDENTIFIER_COLUMNS) * 0.5)
-
-        confidence_score -= 2
-
         audit_logs.append({
             "phase": "VALIDATION PHASE",
-            "rule": "IDENTIFIER_COLUMNS_DETECTED",
+            "rule": "IDENTIFIER_COLUMN_DETECTED",
             "severity": "INFO",
-            "message":
-                f"Identifier-like columns detected: "
-                f"{', '.join(REAL_IDENTIFIER_COLUMNS[:5])}. "
-                f"These columns are recommended for exclusion from training."
+            "message": f"Column '{col}' classified as Sequential Identifier. Excluded from governance evaluation."
         })
 
+    REAL_IDENTIFIER_COLUMNS = identifier_columns
+
+    # Governance penalties for identifiers are removed as requested.
+    # Metadata is simply stored via the audit logs above.
     # =========================================================
     # VALIDATION PHASE
     # =========================================================

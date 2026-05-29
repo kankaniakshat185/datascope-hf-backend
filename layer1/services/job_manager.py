@@ -45,8 +45,15 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
     """
     try:
         start_time = time.time()
+        
+        from layer1.services.governance_scoring import detect_identifier_columns
+        identifiers = detect_identifier_columns(df)
+        # Ensure we do not drop the target column if it was somehow flagged
+        identifiers = [col for col in identifiers if col != target_column]
+        df_ml = df.drop(columns=identifiers) if identifiers else df
+        
         update_job(job_id, "PROCESSING", 10, "Starting ML Validations...")
-        issues = run_checks_func(df, target_column)
+        issues = run_checks_func(df_ml, target_column)
         
         update_job(job_id, "PROCESSING", 30, "Generating Data Dictionary...")
         dict_data = dict_func(df)
@@ -55,7 +62,7 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         eda_data = eda_func(df)
         
         update_job(job_id, "PROCESSING", 70, "Training Segmented SHAP Intelligence...")
-        shap_raw = shap_func(df, target_column)
+        shap_raw = shap_func(df_ml, target_column)
         shap_data = {}
         if isinstance(shap_raw, tuple) and len(shap_raw) == 2:
             shap_data = {"clusters": shap_raw[0], "insights": shap_raw[1]}
@@ -65,7 +72,7 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
             shap_data = {"error": "Invalid SHAP response"}
 
         update_job(job_id, "PROCESSING", 90, "Finalizing Consensus Governance Metrics...")
-        layer1_data = layer1_func(df, target_column)
+        layer1_data = layer1_func(df_ml, target_column)
         
         update_job(job_id, "PROCESSING", 95, "Running Deterministic Governance Rules...")
         # Note: issues is a dict like {"issues": [...], "total_impact": X}
@@ -91,7 +98,7 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         
         from layer1.services.governance_scoring import detect_feature_leakage
         leakage_analysis = detect_feature_leakage(
-            df=df,
+            df=df_ml,
             target_col=target_column,
             problem_type=problem_type,
             feature_impacts=impact_data
@@ -110,7 +117,8 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
             rows_processed=len(df),
             features_evaluated=len(df.columns),
             worst_leakage_category=worst_leakage_category,
-            leakage_analysis=leakage_analysis
+            leakage_analysis=leakage_analysis,
+            identifier_columns=identifiers
         )
 
         result = {
