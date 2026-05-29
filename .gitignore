@@ -1,1 +1,8 @@
 datascope-hf-backup/
+*.pyc
+__pycache__/
+python-sdk/dist/
+python-sdk/build/
+*.egg-info/
+*.png
+*.jpg
