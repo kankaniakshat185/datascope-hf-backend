@@ -160,10 +160,15 @@ def run_layer1_full(df: pd.DataFrame, target_column: str) -> dict:
         row_res[int(idx)] = {
             "is_outlier": bool(row["is_outlier"]),
             "consensus_score": float(row["consensus_score"]),
+            "vote_count": int(row.get("vote_count", 0)),
+            "primary_anomaly_column": row.get("primary_anomaly_column"),
+            "anomaly_value": float(row.get("anomaly_value", 0.0)) if pd.notna(row.get("anomaly_value")) else None,
+            "anomaly_reason": row.get("anomaly_reason"),
+            "detectors_triggered": row.get("detectors_triggered"),
             "method_scores": {
                 "z_score": float(row["z_score"]),
                 "mad_score": float(row["mad_score"]),
-                "isolation_forest": int(row["isolation_forest"]),
+                "isolation_forest": float(row["isolation_forest"]),
                 "dbscan": int(row["dbscan"])
             }
         }

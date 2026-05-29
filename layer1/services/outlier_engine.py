@@ -20,7 +20,7 @@ def compute_z_score(df: pd.DataFrame, threshold: float = 3.0) -> pd.DataFrame:
     std = numeric_df.std().replace(0, np.nan)
 
     z_scores = np.abs((numeric_df - mean) / std).fillna(0.0)
-    return z_scores.max(axis=1)
+    return z_scores.max(axis=1), z_scores
 
 def compute_mad_score(df: pd.DataFrame, threshold: float = 3.5) -> pd.Series:
     """Computes Robust Z-score using Median Absolute Deviation (MAD)."""
@@ -36,7 +36,7 @@ def compute_mad_score(df: pd.DataFrame, threshold: float = 3.5) -> pd.Series:
     modified_z_scores = 0.6745 * diff / mad
     modified_z_scores = modified_z_scores.fillna(0.0)
     
-    return modified_z_scores.max(axis=1)
+    return modified_z_scores.max(axis=1), modified_z_scores
 
 def run_isolation_forest(df: pd.DataFrame) -> pd.Series:
     """Runs Isolation Forest and returns continuous anomaly scores."""
@@ -77,13 +77,44 @@ def normalize_series(series: pd.Series) -> pd.Series:
         return (series - min_val) / (max_val - min_val)
     return pd.Series(0.0, index=series.index)
 
+def identify_anomaly_driver(df: pd.DataFrame, row_idx: Any, z_scores_df: pd.DataFrame, mad_scores_df: pd.DataFrame) -> Dict[str, Any]:
+    if z_scores_df.empty or row_idx not in z_scores_df.index:
+        return {"column": "Unknown", "value": 0.0, "z_score": 0.0, "mad_score": 0.0, "reason": "No explanation available"}
+        
+    z_row = z_scores_df.loc[row_idx]
+    mad_row = mad_scores_df.loc[row_idx]
+    
+    combined = np.maximum(z_row, mad_row)
+    best_col = combined.idxmax()
+    
+    if pd.isna(best_col):
+        return {"column": "Unknown", "value": 0.0, "z_score": 0.0, "mad_score": 0.0, "reason": "No explanation available"}
+        
+    val = df.loc[row_idx, best_col]
+    z_val = z_row[best_col]
+    mad_val = mad_row[best_col]
+    
+    median = df[best_col].median()
+    if val > median:
+        reason = f"{best_col} contains an unusually high value compared to the dataset distribution."
+    else:
+        reason = f"{best_col} contains an unusually low value compared to the dataset distribution."
+        
+    return {
+        "column": str(best_col),
+        "value": float(val) if pd.notna(val) else 0.0,
+        "z_score": float(z_val),
+        "mad_score": float(mad_val),
+        "reason": reason
+    }
+
 def compute_consensus(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     """Runs all methods and enforces true detector agreement (>= 2 votes)."""
     logger.info("Computing Z-Scores...")
-    z_scores = compute_z_score(df)
+    z_scores, z_scores_df = compute_z_score(df)
     
     logger.info("Computing MAD Scores...")
-    mad_scores = compute_mad_score(df)
+    mad_scores, mad_scores_df = compute_mad_score(df)
     
     logger.info("Running Isolation Forest...")
     iso_scores = run_isolation_forest(df)
@@ -110,6 +141,31 @@ def compute_consensus(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
     # 3. True Consensus
     is_outlier = vote_count >= 2
     
+    primary_anomaly_columns = []
+    anomaly_values = []
+    anomaly_reasons = []
+    detectors_triggered_list = []
+    
+    for idx in df.index:
+        if is_outlier.loc[idx]:
+            driver = identify_anomaly_driver(df, idx, z_scores_df, mad_scores_df)
+            primary_anomaly_columns.append(driver["column"])
+            anomaly_values.append(driver["value"])
+            anomaly_reasons.append(driver["reason"])
+            
+            detectors = []
+            if z_vote.loc[idx]: detectors.append("Z-SCORE")
+            if mad_vote.loc[idx]: detectors.append("MAD")
+            if iso_vote.loc[idx]: detectors.append("ISOLATION FOREST")
+            if dbscan_vote.loc[idx]: detectors.append("DBSCAN")
+            
+            detectors_triggered_list.append(", ".join(detectors))
+        else:
+            primary_anomaly_columns.append(None)
+            anomaly_values.append(None)
+            anomaly_reasons.append(None)
+            detectors_triggered_list.append("")
+            
     results_df = pd.DataFrame({
         "z_score": z_scores,
         "mad_score": mad_scores,
@@ -121,7 +177,11 @@ def compute_consensus(df: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         "z_vote": z_vote,
         "mad_vote": mad_vote,
         "iso_vote": iso_vote,
-        "dbscan_vote": dbscan_vote
+        "dbscan_vote": dbscan_vote,
+        "primary_anomaly_column": primary_anomaly_columns,
+        "anomaly_value": anomaly_values,
+        "anomaly_reason": anomaly_reasons,
+        "detectors_triggered": detectors_triggered_list
     }, index=df.index)
     
     percentage_flagged = float(is_outlier.mean() * 100)
