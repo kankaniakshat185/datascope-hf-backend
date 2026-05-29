@@ -6,7 +6,7 @@ setup(
     description="The official Python SDK for DataScope: The Machine Learning Observability Platform",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    author="DataScope Team",
+    author="Akshat Kankani",
     packages=find_packages(),
     install_requires=[
         "requests>=2.25.0",
