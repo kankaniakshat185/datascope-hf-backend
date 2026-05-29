@@ -169,7 +169,7 @@ def detect_feature_leakage(
             )
 
             # INITIAL CLASSIFICATION
-            category = "SAFE"
+            category = "NORMAL_FEATURE"
             
             # Identify true predictors without explicit leakage marks
             is_strong_predictor = (
@@ -181,43 +181,42 @@ def detect_feature_leakage(
             is_target_copy = (corr_signal >= 0.95)
             is_perfect_predictor = (predictive_signal >= 0.99)
             
-            # LEAKAGE CONFIDENCE SCORING
-            leakage_score = 0.0
+            # RAW LEAKAGE SCORING
+            raw_leakage_score = 0.0
             if is_target_copy:
-                leakage_score += 60
+                raw_leakage_score += 60
             elif corr_signal > 0.8:
-                leakage_score += 20
+                raw_leakage_score += 20
                 
             if is_perfect_predictor:
-                leakage_score += 40
+                raw_leakage_score += 40
             elif predictive_signal > 0.90:
-                leakage_score += 15
+                raw_leakage_score += 15
                 
             if is_identifier:
-                leakage_score += 50
+                raw_leakage_score += 50
                 
-            leakage_score += min(mi_signal * 10, 20)
+            raw_leakage_score += min(mi_signal * 10, 20)
 
-            # FINAL CLASSIFICATION
-            if leakage_score >= 85:
+            # NORMALIZE CONFIDENCE SCORE (SIGMOID)
+            import math
+            display_confidence = round(100 / (1 + math.exp(-0.06 * (raw_leakage_score - 30))), 1)
+
+            # FINAL CLASSIFICATION HIERARCHY
+            if is_target_copy or (is_identifier and predictive_signal > 0.8) or raw_leakage_score >= 85:
                 category = "CONFIRMED_LEAKAGE"
-            elif leakage_score >= 60:
-                category = "LEAKAGE_CANDIDATE"
+            elif raw_leakage_score >= 60 and not is_strong_predictor:
+                category = "HIGH_RISK_PROXY"
             elif is_strong_predictor:
                 category = "STRONG_PREDICTOR"
             else:
-                category = "SAFE"
-
-            # STEP 6 - BLOCK IDENTIFIER FEATURES
-            if is_identifier and predictive_signal > 0.8:
-                category = "CONFIRMED_LEAKAGE"
-                leakage_score = max(leakage_score, 90)
+                category = "NORMAL_FEATURE"
 
             # TRACK WORST CATEGORY
             priority = {
-                "SAFE": 0,
+                "NORMAL_FEATURE": 0,
                 "STRONG_PREDICTOR": 1,
-                "LEAKAGE_CANDIDATE": 2,
+                "HIGH_RISK_PROXY": 2,
                 "CONFIRMED_LEAKAGE": 3
             }
             if (
@@ -229,7 +228,8 @@ def detect_feature_leakage(
             # STORE RESULTS
             leakage_results[feature] = {
                 "category": category,
-                "leakage_score": round(leakage_score, 2),
+                "leakage_score": display_confidence,
+                "raw_score": round(raw_leakage_score, 2),
                 "signals": {
                     "identifier": bool(is_identifier),
                     "correlation": round(float(corr_signal), 4),
@@ -553,21 +553,21 @@ def calculate_governance_score(
                     "message": f"Feature '{f}' classified as STRONG_PREDICTOR. High model dependence observed. No direct leakage evidence detected."
                 })
 
-    elif worst_leakage_category == "LEAKAGE_CANDIDATE":
+    elif worst_leakage_category == "HIGH_RISK_PROXY":
         governance_score -= 12
         stability_score -= 8
         shap_leakage = True
         
         if leakage_analysis:
             reports = leakage_analysis.get("feature_reports", {})
-            candidate_features = [f for f, data in reports.items() if data["category"] == "LEAKAGE_CANDIDATE"]
+            candidate_features = [f for f, data in reports.items() if data["category"] == "HIGH_RISK_PROXY"]
             for f in candidate_features[:3]:
                 score = reports[f]["leakage_score"]
                 audit_logs.append({
                     "phase": "ANALYSIS PHASE",
-                    "rule": "LEAKAGE_CANDIDATE",
+                    "rule": "HIGH_RISK_PROXY",
                     "severity": "WARNING",
-                    "message": f"Feature '{f}' classified as LEAKAGE_CANDIDATE (confidence: {score})."
+                    "message": f"Feature '{f}' classified as HIGH_RISK_PROXY (confidence: {score}%)."
                 })
 
     elif worst_leakage_category == "CONFIRMED_LEAKAGE":
@@ -585,7 +585,7 @@ def calculate_governance_score(
                     "phase": "ANALYSIS PHASE",
                     "rule": "LEAKAGE_CONFIRMED",
                     "severity": "CRITICAL",
-                    "message": f"Feature '{f}' classified as CONFIRMED_LEAKAGE (confidence: {score})."
+                    "message": f"Feature '{f}' classified as CONFIRMED_LEAKAGE (confidence: {score}%)."
                 })
 
     else:
