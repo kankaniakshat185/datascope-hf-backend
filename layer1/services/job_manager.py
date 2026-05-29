@@ -127,7 +127,7 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
             features_evaluated=len(df.columns),
             worst_leakage_category=worst_leakage_category,
             leakage_analysis=leakage_analysis,
-            identifier_columns=identifiers
+            identifier_columns=identifiers_dict
         )
 
         result = {
