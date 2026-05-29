@@ -64,19 +64,7 @@ def run_validators(df: pd.DataFrame) -> list:
                     "count": int(duplicates),
                     "percentage": (duplicates / len(df)) * 100
                 })
-        else:
-            if pd.api.types.is_numeric_dtype(df[col]):
-                duplicates = df.duplicated(subset=[col]).sum()
-                if duplicates > 0:
-                    # Limit the flood of info messages by checking ratio
-                    ratio = duplicates / len(df)
-                    if ratio < 0.9: # Normal measurements will naturally repeat
-                        issues.append({
-                            "type": "repeated_values",
-                            "column": col,
-                            "count": int(duplicates),
-                            "percentage": ratio * 100
-                        })
+
     # 3. Categorical Validation (Cardinality check)
     for col in df.select_dtypes(include=['object', 'category']).columns:
         unique_vals = df[col].nunique()

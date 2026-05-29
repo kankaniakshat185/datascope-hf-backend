@@ -75,15 +75,7 @@ def format_suggestions(issue: dict, impact: float) -> dict:
 
         formatted["description"] = f"Duplicate identifiers found in ID column '{col}'"
         formatted["suggestion"] = "Ensure unique identifiers or drop duplicates"
-        
-    elif issue_type == "repeated_values":
-        col = issue.get("column", "unknown")
-        
-        formatted["description"] = f"Repeated values observed in feature {col}. This is expected for measurement data."
-        formatted["suggestion"] = "No action required."
-        formatted["severity"] = "INFO"
-        formatted["impact"] = 0.0
-        formatted["impact_display"] = "N/A"
+
 
     elif issue_type == "high_cardinality":
         col = issue.get("column", "unknown")
