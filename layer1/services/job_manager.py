@@ -47,10 +47,19 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         start_time = time.time()
         
         from layer1.services.governance_scoring import detect_identifier_columns
-        identifiers = detect_identifier_columns(df)
-        # Ensure we do not drop the target column if it was somehow flagged
-        identifiers = [col for col in identifiers if col != target_column]
-        df_ml = df.drop(columns=identifiers) if identifiers else df
+        identifiers_dict = detect_identifier_columns(df)
+        
+        # Ensure we do not drop the target column
+        for key in identifiers_dict:
+            identifiers_dict[key] = [col for col in identifiers_dict[key] if col != target_column]
+            
+        all_identifiers_to_drop = (
+            identifiers_dict["IDENTIFIER_COLUMN_DETECTED"] +
+            identifiers_dict["POTENTIAL_IDENTIFIER"] +
+            identifiers_dict["HIGH_CARDINALITY_TEXT"]
+        )
+        
+        df_ml = df.drop(columns=all_identifiers_to_drop) if all_identifiers_to_drop else df
         
         update_job(job_id, "PROCESSING", 10, "Starting ML Validations...")
         issues = run_checks_func(df_ml, target_column)

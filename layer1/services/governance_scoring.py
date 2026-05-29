@@ -12,42 +12,88 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def is_sequential_identifier(series) -> bool:
+    import pandas as pd
+    import numpy as np
+    try:
+        if not pd.api.types.is_integer_dtype(series):
+            return False
+            
+        non_nulls = series.dropna()
+        if len(non_nulls) == 0:
+            return False
+            
+        uniqueness_ratio = len(non_nulls.unique()) / len(non_nulls)
+        if uniqueness_ratio <= 0.995:
+            return False
+            
+        is_inc = non_nulls.is_monotonic_increasing
+        is_dec = non_nulls.is_monotonic_decreasing
+        
+        if not (is_inc or is_dec):
+            return False
+            
+        sorted_vals = non_nulls.sort_values()
+        diffs = sorted_vals.diff().dropna()
+        
+        if len(diffs) == 0:
+            return False
+            
+        median_diff = diffs.median()
+        if pd.isna(median_diff) or median_diff == 0:
+            return False
+            
+        # Median difference between adjacent sorted values is constant
+        # check if at least 95% of diffs equal the median
+        if (diffs == median_diff).mean() > 0.95:
+            return True
+            
+        return False
+    except Exception:
+        return False
+
 def detect_identifier_columns(df):
-    """
-    Detects synthetic identifiers and row-index-like columns.
-    These should usually never participate in model training.
-    """
-
-    suspicious = []
-
+    import pandas as pd
+    import re
+    
+    classifications = {
+        "IDENTIFIER_COLUMN_DETECTED": [],
+        "POTENTIAL_IDENTIFIER": [],
+        "HIGH_CARDINALITY_TEXT": []
+    }
+    
+    id_pattern = re.compile(r'(^id$|_id$|^id_|_id_|^uuid$|^guid$|^record_id$|^customer_id$|^transaction_id$)')
+    potential_pattern = re.compile(r'(code|key|token|reference|account)')
+    
     for col in df.columns:
         try:
             name = str(col).lower()
-
-            uniqueness_ratio = df[col].nunique(dropna=False) / max(1, len(df))
-
-            is_monotonic = False
-            try:
-                is_monotonic = df[col].is_monotonic_increasing
-            except:
-                pass
-
-            import re
-            is_id_pattern = bool(re.search(r'(^id$|_id$|^id_|_id_|^uuid$|^guid$|^record_id$|^customer_id$|^transaction_id$)', name))
+            non_nulls = df[col].dropna()
+            if len(non_nulls) == 0:
+                continue
+                
+            uniqueness_ratio = len(non_nulls.unique()) / len(non_nulls)
             
-            if (
-                is_id_pattern
-                or (uniqueness_ratio > 0.995 and pd.api.types.is_integer_dtype(df[col]))
-                or (uniqueness_ratio > 0.995 and pd.api.types.is_string_dtype(df[col]) and df[col].str.len().mean() > 15)
-            ):
-                suspicious.append(col)
-
+            is_id_name = bool(id_pattern.search(name))
+            
+            if is_id_name or is_sequential_identifier(df[col]):
+                classifications["IDENTIFIER_COLUMN_DETECTED"].append(col)
+                continue
+                
+            is_potential_name = bool(potential_pattern.search(name))
+            if uniqueness_ratio > 0.995 and is_potential_name:
+                classifications["POTENTIAL_IDENTIFIER"].append(col)
+                continue
+                
+            if uniqueness_ratio > 0.995 and pd.api.types.is_string_dtype(df[col]):
+                classifications["HIGH_CARDINALITY_TEXT"].append(col)
+                continue
+                
         except Exception:
             continue
-
-    return suspicious
-
-
+            
+    return classifications
 
 def detect_feature_leakage(
     df: pd.DataFrame,
@@ -284,14 +330,33 @@ def calculate_governance_score(
     # =========================================================
 
     if identifier_columns is None:
-        identifier_columns = []
+        identifier_columns = {"IDENTIFIER_COLUMN_DETECTED": [], "POTENTIAL_IDENTIFIER": [], "HIGH_CARDINALITY_TEXT": []}
         
-    for col in identifier_columns:
+    if isinstance(identifier_columns, list):
+        identifier_columns = {"IDENTIFIER_COLUMN_DETECTED": identifier_columns, "POTENTIAL_IDENTIFIER": [], "HIGH_CARDINALITY_TEXT": []}
+        
+    for col in identifier_columns.get("IDENTIFIER_COLUMN_DETECTED", []):
         audit_logs.append({
             "phase": "VALIDATION PHASE",
             "rule": "IDENTIFIER_COLUMN_DETECTED",
             "severity": "INFO",
             "message": f"Column '{col}' classified as Sequential Identifier. Excluded from governance evaluation."
+        })
+        
+    for col in identifier_columns.get("POTENTIAL_IDENTIFIER", []):
+        audit_logs.append({
+            "phase": "VALIDATION PHASE",
+            "rule": "POTENTIAL_IDENTIFIER",
+            "severity": "INFO",
+            "message": f"Column '{col}' classified as Potential Identifier due to name and high cardinality. Excluded from governance evaluation."
+        })
+        
+    for col in identifier_columns.get("HIGH_CARDINALITY_TEXT", []):
+        audit_logs.append({
+            "phase": "VALIDATION PHASE",
+            "rule": "HIGH_CARDINALITY_TEXT",
+            "severity": "INFO",
+            "message": f"Column '{col}' contains highly unique text values. Excluded from identifier classification."
         })
 
     REAL_IDENTIFIER_COLUMNS = identifier_columns
