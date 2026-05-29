@@ -65,7 +65,7 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         issues = run_checks_func(df_ml, target_column)
         
         update_job(job_id, "PROCESSING", 30, "Generating Data Dictionary...")
-        dict_data = dict_func(df)
+        dict_data = dict_func(df, identifiers_dict)
         
         update_job(job_id, "PROCESSING", 50, "Generating EDA Visualizations...")
         eda_data = eda_func(df)

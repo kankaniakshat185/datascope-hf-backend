@@ -74,7 +74,7 @@ def check_format_anomalies(col_series: pd.Series) -> bool:
         return True
     return False
 
-def generate_data_dictionary(df: pd.DataFrame) -> dict:
+def generate_data_dictionary(df: pd.DataFrame, identifiers_dict: dict = None) -> dict:
     total_rows = len(df)
     dictionary = []
     
@@ -105,18 +105,26 @@ def generate_data_dictionary(df: pd.DataFrame) -> dict:
             col_info["max"] = float(col_series.max()) if not pd.isna(col_series.max()) else None
             col_info["mean"] = float(col_series.mean()) if not pd.isna(col_series.mean()) else None
             
-            # Calculate univariate outlier percentage using the Layer 1 Consensus engine
-            try:
-                # Run consensus on just this column
-                col_df = df[[col]].copy()
-                # compute_consensus requires at least 10 rows for isolation forest/dbscan
-                if len(col_df.dropna()) > 10:
-                    results_df, summary = compute_consensus(col_df)
-                    col_info["outlier_percentage"] = round(summary["percentage_flagged"], 2)
-                else:
+            # Check if this column is an identifier
+            is_identifier = False
+            if identifiers_dict and col in identifiers_dict.get("IDENTIFIER_COLUMN_DETECTED", []):
+                is_identifier = True
+                
+            if is_identifier:
+                col_info["outlier_percentage"] = "N/A"
+            else:
+                # Calculate univariate outlier percentage using the Layer 1 Consensus engine
+                try:
+                    # Run consensus on just this column
+                    col_df = df[[col]].copy()
+                    # compute_consensus requires at least 10 rows for isolation forest/dbscan
+                    if len(col_df.dropna()) > 10:
+                        results_df, summary = compute_consensus(col_df)
+                        col_info["outlier_percentage"] = round(summary["percentage_flagged"], 2)
+                    else:
+                        col_info["outlier_percentage"] = 0.0
+                except Exception as e:
                     col_info["outlier_percentage"] = 0.0
-            except Exception as e:
-                col_info["outlier_percentage"] = 0.0
         else:
             mode_val = col_series.mode()
             col_info["top_value"] = str(mode_val.iloc[0]) if not mode_val.empty else None
