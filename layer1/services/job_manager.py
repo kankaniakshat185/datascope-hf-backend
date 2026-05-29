@@ -35,7 +35,9 @@ def get_job(job_id: str) -> Dict[str, Any]:
     return jobs_store.get(job_id, {"error": "Job not found", "status": "FAILED"})
 
 from layer1.services.governance_scoring import calculate_governance_score
-from layer1.services.meta_governance_arbitrator import arbitrate_governance_signals
+import json
+import logging
+import traceback
 
 def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_func, eda_func, shap_func, layer1_func):
     """
@@ -69,23 +71,21 @@ def process_analysis_job(job_id: str, df, target_column, run_checks_func, dict_f
         # Note: issues is a dict like {"issues": [...], "total_impact": X}
         actual_issues = issues.get("issues", []) if isinstance(issues, dict) else issues
         
-        # 1. META-GOVERNANCE ARBITRATION
+        # 1. ISSUE ARBITRATION (Replaces legacy meta-arbitrator)
+        final_arbitrated_issues = []
         outlier_pct = 0.0
         if layer1_data and "outlier_analysis" in layer1_data:
             outlier_pct = layer1_data["outlier_analysis"].get("summary", {}).get("percentage_flagged", 0)
             
+        for issue in actual_issues:
+            if issue.get("type") == "high_correlation":
+                pass # Suppress correlation issues
+            elif issue.get("type") == "outliers" and outlier_pct < 5.0:
+                pass # Suppress weak outlier issues
+            else:
+                final_arbitrated_issues.append(issue)
+        
         impact_data = layer1_data.get("feature_importance", {}).get("features", {}) if layer1_data else {}
-        
-        arbitration_result = arbitrate_governance_signals(
-            df=df,
-            target_column=target_column,
-            ml_issues=actual_issues,
-            outlier_pct=outlier_pct,
-            shap_insights=shap_data.get("insights", []),
-            impact_data=impact_data
-        )
-        
-        final_arbitrated_issues = arbitration_result["arbitrated_issues"]
         # 1.5 STATISTICAL LEAKAGE DETECTION
         problem_type = "classification" if (df[target_column].nunique() < 20 or not pd.api.types.is_numeric_dtype(df[target_column])) else "regression"
         

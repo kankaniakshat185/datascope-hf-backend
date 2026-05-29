@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="datascope-ml",
-    version="1.0.1",
+    version="1.0.2",
     description="The official Python SDK for DataScope: The Machine Learning Observability Platform",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",

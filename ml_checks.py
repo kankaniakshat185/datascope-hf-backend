@@ -62,16 +62,4 @@ def run_ml_checks(df: pd.DataFrame, target_col: str) -> list:
                         "count": int(outlier_count)
                     })
 
-    # 4. Data Leakage (feature highly correlated with target) 
-    if target_col in num_df.columns:
-        target_corr = num_df.corr()[target_col].drop(target_col).abs()
-        leaky_features = target_corr[target_corr > 0.95].index.tolist()
-        if leaky_features:
-            for leaky in leaky_features:
-                issues.append({
-                    "type": "data_leakage",
-                    "column": leaky,
-                    "correlation": float(target_corr[leaky])
-                })
-                
     return issues

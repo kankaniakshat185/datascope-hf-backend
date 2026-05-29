@@ -1,0 +1,9 @@
+README.md
+setup.py
+datascope/__init__.py
+datascope/client.py
+datascope_ml.egg-info/PKG-INFO
+datascope_ml.egg-info/SOURCES.txt
+datascope_ml.egg-info/dependency_links.txt
+datascope_ml.egg-info/requires.txt
+datascope_ml.egg-info/top_level.txt
