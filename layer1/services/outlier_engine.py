@@ -18,7 +18,7 @@ def compute_z_score(df: pd.DataFrame, threshold: float = 3.0) -> pd.DataFrame:
     
     mean = numeric_df.mean()
     std = numeric_df.std().replace(0, np.nan)
-    
+
     z_scores = np.abs((numeric_df - mean) / std).fillna(0.0)
     return z_scores.max(axis=1)
 
