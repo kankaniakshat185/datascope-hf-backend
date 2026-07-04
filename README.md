@@ -37,8 +37,8 @@ Why leave your IDE to clean your data? The official DataScope PyPI package bridg
 pip install datascope-ml
 ```
 
-### Usage
-Generate your personal **SDK Key** securely from your DataScope web vault, and authenticate your local scripts:
+### Usage: Dashboard Mode
+Generate your personal **SDK Key** securely from your DataScope web vault (create one for free on our website at [https://datascope-app.vercel.app](https://datascope-app.vercel.app)), and authenticate your local scripts:
 
 ```python
 import pandas as pd
@@ -60,8 +60,22 @@ client.analyze(
 )
 ```
 
+### Usage: Programmatic MLOps (CI/CD)
+The SDK can also act as an automated blocking gate in Airflow/Prefect or fetch granular ML microservices directly in your Python code:
+
+```python
+# 1. CI/CD Governance Gating
+client.assert_ready_for_deployment(df, target_column="is_fraud") # Raises RuntimeError if REJECTED
+
+# 2. Granular Microservices
+clean_df = client.clean(df)
+drift_report = client.detect_drift(test_df, train_distributions)
+eda_stats = client.get_eda(df)
+features = client.get_feature_importance(df, target_column="is_fraud")
+```
+
 **What happens next?** 
-The SDK securely streams your data to the cloud engines, processes the anomalies, and instantly pops open an interactive web dashboard in your browser with the full mathematical breakdown of your data health.
+The SDK securely streams your data to the cloud engines, processes the anomalies, and instantly pops open an interactive web dashboard in your browser with the full mathematical breakdown of your data health, or returns the raw JSON if used programmatically.
 
 ---
 
